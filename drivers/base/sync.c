@@ -305,6 +305,68 @@ static int sync_fence_copy_pts(struct sync_fence *dst, struct sync_fence *src)
 	return 0;
 }
 
+<<<<<<< HEAD
+=======
+static int sync_fence_merge_pts(struct sync_fence *dst, struct sync_fence *src)
+{
+	struct list_head *src_pos, *dst_pos, *n;
+
+	list_for_each(src_pos, &src->pt_list_head) {
+		struct sync_pt *src_pt =
+			container_of(src_pos, struct sync_pt, pt_list);
+		bool collapsed = false;
+
+		list_for_each_safe(dst_pos, n, &dst->pt_list_head) {
+			struct sync_pt *dst_pt =
+				container_of(dst_pos, struct sync_pt, pt_list);
+			/* collapse two sync_pts on the same timeline
+			 * to a single sync_pt that will signal at
+			 * the later of the two
+			 */
+			if (dst_pt->parent == src_pt->parent) {
+				if (dst_pt->parent->ops->compare(dst_pt, src_pt) == -1) {
+					struct sync_pt *new_pt =
+						sync_pt_dup(src_pt);
+					if (new_pt == NULL)
+						return -ENOMEM;
+
+					new_pt->fence = dst;
+					list_replace(&dst_pt->pt_list,
+						     &new_pt->pt_list);
+					sync_pt_activate(new_pt);
+					sync_pt_free(dst_pt);
+				}
+				collapsed = true;
+				break;
+			}
+		}
+
+		if (!collapsed) {
+			struct sync_pt *new_pt = sync_pt_dup(src_pt);
+
+			if (new_pt == NULL)
+				return -ENOMEM;
+
+			new_pt->fence = dst;
+			list_add(&new_pt->pt_list, &dst->pt_list_head);
+			sync_pt_activate(new_pt);
+		}
+	}
+
+	return 0;
+}
+
+static void sync_fence_detach_pts(struct sync_fence *fence)
+{
+	struct list_head *pos, *n;
+
+	list_for_each_safe(pos, n, &fence->pt_list_head) {
+		struct sync_pt *pt = container_of(pos, struct sync_pt, pt_list);
+		sync_timeline_remove_pt(pt);
+	}
+}
+
+>>>>>>> a1b5b65... sync: optimize fence merges
 static void sync_fence_free_pts(struct sync_fence *fence)
 {
 	struct list_head *pos, *n;
@@ -429,6 +491,7 @@ static void sync_fence_signal_pt(struct sync_pt *pt)
 	}
 }
 
+<<<<<<< HEAD
 int sync_fence_wait_async(struct sync_fence *fence,
 			  void (*callback)(struct sync_fence *, void *data),
 			  void *callback_data)
@@ -457,6 +520,16 @@ out:
 	spin_unlock_irqrestore(&fence->waiter_list_lock, flags);
 
 	return err;
+=======
+static bool sync_fence_check(struct sync_fence *fence)
+{
+	/*
+	 * Make sure that reads to fence->status are ordered with the
+	 * wait queue event triggering
+	 */
+	smp_rmb();
+	return fence->status != 0;
+>>>>>>> a1b5b65... sync: optimize fence merges
 }
 
 int sync_fence_cancel_async(struct sync_fence *fence,
