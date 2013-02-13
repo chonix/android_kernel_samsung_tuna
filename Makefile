@@ -193,7 +193,7 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 export KBUILD_BUILDHOST := $(SUBARCH)
 ARCH		?= arm
-CROSS_COMPILE	?= $(CONFIG_CROSS_COMPILE:"%"=%)
+CROSS_COMPILE	?= ../arm-linux-androideabi-4.7/bin/arm-linux-androideabi-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
@@ -246,10 +246,6 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 HOSTCC       = gcc
 HOSTCXX      = g++
 HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer
-<<<<<<< HEAD:Makefile.bak
-HOSTCXXFLAGS = -Ofast
-
-=======
 HOSTCXXFLAGS = -O2
 HOSTCC       = $(CCACHE) gcc
 HOSTCXX      = $(CCACHE) g++
@@ -260,7 +256,6 @@ else
  HOSTCFLAGS   = -Wall -W -Wmissing-prototypes -Wno-sign-compare -Wstrict-prototypes -Wno-unused-parameter -Wno-missing-field-initializers -O2 -fno-delete-null-pointer-checks
  HOSTCXXFLAGS = -O2 -Wall -W -fno-delete-null-pointer-checks
 endif
->>>>>>> c920c98... Makefile: Add Config Variable Os - O2 - O3 for choice Compilation:Makefile
 # Decide whether to build built-in, modular, or both.
 # Normally, just do built-in.
 
@@ -360,20 +355,10 @@ CHECK		= sparse
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-CFLAGS_MODULE   = -mcpu=cortex-a9 -mfpu=neon -ftree-vectorize -fsingle-precision-constant -fno-pic
-
-LOW_ARM_FLAGS	= -march=armv7-a -mtune=cortex-a9 \
-		  -mfpu=neon -mfloat-abi=softfp
-
-ARM_FLAGS         -marm -march=armv7-a -mtune=cortex-a9 \
-		  -mfpu=neon -mfloat-abi=softfp \
-		  -fsingle-precision-constant -mvectorize-with-neon-quad
-		 
-
-CFLAGS_MODULE   = -fno-pic
+CFLAGS_MODULE   =
 AFLAGS_MODULE   =
 LDFLAGS_MODULE  =
-CFLAGS_KERNEL	= -mcpu=cortex-a9 -mfpu=neon -ftree-vectorize -fsingle-precision-constant
+CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
@@ -391,32 +376,14 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks \
-		   -fsingle-precision-constant
+		   -fno-delete-null-pointer-checks
 KBUILD_AFLAGS_KERNEL :=
-<<<<<<< HEAD:Makefile.bak
-
-KBUILD_CFLAGS_KERNEL :=
-=======
->>>>>>> c920c98... Makefile: Add Config Variable Os - O2 - O3 for choice Compilation:Makefile
 ifdef CCONFIG_CC_OPTIMIZE_O3
  KBUILD_CFLAGS_KERNEL := -O3 -mtune=cortex-a9 -march=armv7-a -mfpu=neon -ftree-vectorize
 else
  KBUILD_CFLAGS_KERNEL := -O2 -mtune=cortex-a9 -march=armv7-a -mfpu=neon -ftree-vectorize
 endif
 
-<<<<<<< HEAD:Makefile.bak
-ifdef CONFIG_CC_GRAPHITE_OPTIMIZATION
-KBUILD_CFLAGS      += -fgraphite-identity -floop-parallelize-all -floop-interchange -floop-strip-mine \
-                 -floop-block
-endif
-
-ifdef CONFIG_CC_LINK_TIME_OPTIMIZATION
-KBUILD_CFLAGS        += -flto -fno-toplevel-reorder -fno-fat-lto-objects -ftlo=2
-endif
-
-=======
->>>>>>> c920c98... Makefile: Add Config Variable Os - O2 - O3 for choice Compilation:Makefile
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 KBUILD_AFLAGS_MODULE  := -DMODULE
 KBUILD_CFLAGS_MODULE  := -DMODULE
@@ -1615,5 +1582,3 @@ FORCE:
 # Declare the contents of the .PHONY variable as phony.  We keep that
 # information in a variable so we can use it in if_changed and friends.
 .PHONY: $(PHONY)
-
-
