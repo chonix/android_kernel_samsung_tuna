@@ -329,6 +329,25 @@ uint dhd_console_ms = 0;
 module_param(dhd_console_ms, uint, 0644);
 #endif /* defined(DHD_DEBUG) */
 
+<<<<<<< HEAD
+=======
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+bool wifi_fast = false;
+module_param(wifi_fast, bool, 0644);
+#endif
+/* Control wifi power mode and suspend DTIM skipping during sleep
+ * /sys/module/bcmdhd/wifi_pm
+ * /sys/module/bcmdhd/dtim_skip_override
+ */
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+uint wifi_pm = 0;
+module_param(wifi_pm, uint, 0644);
+
+uint dtim_skip_override = 0;
+module_param(dtim_skip_override, uint, 0644);
+#endif /* defined(CONFIG_HAS_EARLYSUSPEND) */
+
+>>>>>>> 814c7f0... wireless/bcmdhd: option to override suspend dtim_skip (sysfs)
 /* ARP offload agent mode : enable ARP Peer Auto-Reply */
 uint dhd_arp_mode = ARP_OL_AGENT | ARP_OL_PEER_AUTO_REPLY;
 module_param(dhd_arp_mode, uint, 0);
@@ -560,7 +579,10 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 			 * each third DTIM for better power savings.  Note that
 			 * one side effect is a chance to miss BC/MC packet.
 			 */
-			bcn_li_dtim = dhd_get_dtim_skip(dhd);
+			if (dtim_skip_override == 0)
+				bcn_li_dtim = dhd_get_dtim_skip(dhd);
+			else
+				bcn_li_dtim = dtim_skip_override - 1;
 			bcm_mkiovar("bcn_li_dtim", (char *)&bcn_li_dtim,
 				4, iovbuf, sizeof(iovbuf));
 			dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
