@@ -37,6 +37,10 @@
 #include <linux/sched.h>
 #include <linux/rcupdate.h>
 #include <linux/notifier.h>
+#ifdef CONFIG_MEMORY_HOTPLUG
+#include <linux/memory.h>
+#include <linux/memory_hotplug.h>
+#endif
 
 static uint32_t lowmem_debug_level = 2;
 static int lowmem_adj[6] = {
@@ -54,6 +58,16 @@ static int lowmem_minfree[6] = {
 };
 static int lowmem_minfree_size = 4;
 
+#ifdef CONFIG_MEMORY_HOTPLUG
+static unsigned int offlining = 0;
+#endif
+#ifdef ENHANCED_LMK_ROUTINE
+static struct task_struct *lowmem_deathpending[LOWMEM_DEATHPENDING_DEPTH] = {
+	NULL,
+};
+#else
+static struct task_struct *lowmem_deathpending;
+#endif
 static unsigned long lowmem_deathpending_timeout;
 
 #define lowmem_print(level, x...)			\
@@ -61,6 +75,58 @@ static unsigned long lowmem_deathpending_timeout;
 		if (lowmem_debug_level >= (level))	\
 			printk(x);			\
 	} while (0)
+
+static int
+task_notify_func(struct notifier_block *self, unsigned long val, void *data);
+
+static struct notifier_block task_nb = {
+	.notifier_call	= task_notify_func,
+};
+
+static int
+task_notify_func(struct notifier_block *self, unsigned long val, void *data)
+{
+	struct task_struct *task = data;
+#ifdef ENHANCED_LMK_ROUTINE
+	int i = 0;
+
+	for (i = 0; i < LOWMEM_DEATHPENDING_DEPTH; i++) {
+		if (task == lowmem_deathpending[i]) {
+			lowmem_deathpending[i] = NULL;
+			break;
+		}
+	}
+#else
+	if (task == lowmem_deathpending)
+		lowmem_deathpending = NULL;
+#endif
+
+	return NOTIFY_OK;
+}
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+static int lmk_hotplug_callback(struct notifier_block *self,
+				unsigned long cmd, void *data)
+{
+	switch (cmd) {
+	/* Don't care LMK cases */
+	case MEM_ONLINE:
+	case MEM_OFFLINE:
+	case MEM_CANCEL_ONLINE:
+	case MEM_CANCEL_OFFLINE:
+	case MEM_GOING_ONLINE:
+		offlining = 0;
+		lowmem_print(4, "lmk in normal mode\n");
+		break;
+	/* LMK should account for movable zone */
+	case MEM_GOING_OFFLINE:
+		offlining = 1;
+		lowmem_print(4, "lmk in hotplug mode\n");
+		break;
+	}
+	return NOTIFY_DONE;
+}
+#endif
 
 static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 {
@@ -76,8 +142,40 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int other_free = global_page_state(NR_FREE_PAGES);
 	int other_file = global_page_state(NR_FILE_PAGES) -
 						global_page_state(NR_SHMEM);
+#ifdef CONFIG_MEMORY_HOTPLUG
+	struct zone *zone;
 
-
+	if (offlining) {
+		/* Discount all free space in the section being offlined */
+		for_each_zone(zone) {
+			 if (zone_idx(zone) == ZONE_MOVABLE) {
+				other_free -= zone_page_state(zone,
+						NR_FREE_PAGES);
+				lowmem_print(4, "lowmem_shrink discounted "
+					"%lu pages in movable zone\n",
+					zone_page_state(zone, NR_FREE_PAGES));
+			}
+		}
+	}
+#endif
+	/*
+	 * If we already have a death outstanding, then
+	 * bail out right away; indicating to vmscan
+	 * that we have nothing further to offer on
+	 * this pass.
+	 *
+	 */
+#ifdef ENHANCED_LMK_ROUTINE
+	for (i = 0; i < LOWMEM_DEATHPENDING_DEPTH; i++) {
+		if (lowmem_deathpending[i] &&
+			time_before_eq(jiffies, lowmem_deathpending_timeout))
+			return 0;
+	}
+#else
+	if (lowmem_deathpending &&
+	    time_before_eq(jiffies, lowmem_deathpending_timeout))
+		return 0;
+#endif
 	if (lowmem_adj_size < array_size)
 		array_size = lowmem_adj_size;
 	if (lowmem_minfree_size < array_size)
@@ -167,6 +265,10 @@ static struct shrinker lowmem_shrinker = {
 static int __init lowmem_init(void)
 {
 	register_shrinker(&lowmem_shrinker);
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+	hotplug_memory_notifier(lmk_hotplug_callback, 0);
+#endif
 	return 0;
 }
 
