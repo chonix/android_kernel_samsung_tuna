@@ -9,6 +9,19 @@
 #include <linux/sched.h>
 #include <linux/module.h>
 
+<<<<<<< HEAD
+=======
+enum rwsem_waiter_type {
+	RWSEM_WAITING_FOR_WRITE,
+	RWSEM_WAITING_FOR_READ
+};
+
+enum rwsem_waiter_type {
+	RWSEM_WAITING_FOR_WRITE,
+	RWSEM_WAITING_FOR_READ
+};
+
+>>>>>>> af73141... Update RWSEM to Linux 3.10.x
 struct rwsem_waiter {
 	struct list_head list;
 	struct task_struct *task;
@@ -91,7 +104,10 @@ __rwsem_do_wake(struct rw_semaphore *sem, int wakewrite)
 	}
 
 	/* grant an infinite number of read locks to the front of the queue */
+<<<<<<< HEAD
  dont_wake_writers:
+=======
+>>>>>>> af73141... Update RWSEM to Linux 3.10.x
 	woken = 0;
 	while (waiter->flags & RWSEM_WAITING_FOR_READ) {
 		struct list_head *next = waiter->list.next;
@@ -262,8 +278,8 @@ int __down_write_trylock(struct rw_semaphore *sem)
 
 	spin_lock_irqsave(&sem->wait_lock, flags);
 
-	if (sem->activity == 0 && list_empty(&sem->wait_list)) {
-		/* granted */
+	if (sem->activity == 0) {
+		/* got the lock */
 		sem->activity = -1;
 		ret = 1;
 	}
