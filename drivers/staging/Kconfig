@@ -162,4 +162,9 @@ source "drivers/staging/mei/Kconfig"
 
 source "drivers/staging/nvec/Kconfig"
 
+<<<<<<< HEAD
+=======
+source "drivers/staging/thermal_framework/Kconfig"
+
+>>>>>>> 5c4f6e1... Squash Thermal Framework Support
 endif # STAGING
