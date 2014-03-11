@@ -24,6 +24,10 @@
 #include <linux/ktime.h>
 #include <linux/sched.h>
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#endif
+
 /*
  * dbs is used in this file as a shortform for demandbased switching
  * It helps to keep variable names smaller, simpler
@@ -110,34 +114,64 @@ static struct dbs_tuners {
     unsigned int powersave_bias;
     unsigned int io_is_busy;
     unsigned int min_timeinstate;
+#ifdef CONFIG_HAS_EARLYSUSPEND
+    bool screenoff_maxfreq;
+#endif
 } dbs_tuners_ins = {
     .up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
     .down_differential = DEF_FREQUENCY_DOWN_DIFFERENTIAL,
     .ignore_nice = 0,
     .powersave_bias = 0,
+#ifdef CONFIG_HAS_EARLYSUSPEND
+    .screenoff_maxfreq = false,
+#endif
 };
 
-static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu,
-						  u64 *wall)
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static bool suspended = false;
+
+static void lazy_early_suspend(struct early_suspend *handler)
 {
-	u64 idle_time;
-	u64 cur_wall_time;
-	u64 busy_time;
+    suspended = true;
 
-	cur_wall_time = jiffies64_to_cputime64(get_jiffies_64());
+    return;
+}
 
-	busy_time  = kcpustat_cpu(cpu).cpustat[CPUTIME_USER];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SYSTEM];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_IRQ];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SOFTIRQ];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_STEAL];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
+static void lazy_late_resume(struct early_suspend *handler)
+{
+    suspended = false;
 
-	idle_time = cur_wall_time - busy_time;
-	if (wall)
-		*wall = jiffies_to_usecs(cur_wall_time);
+    return;
+}
 
-	return jiffies_to_usecs(idle_time);
+static struct early_suspend lazy_suspend = {
+	.suspend = lazy_early_suspend,
+	.resume = lazy_late_resume,
+	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1,
+};
+#endif
+
+static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
+						  cputime64_t *wall)
+{
+    cputime64_t idle_time;
+    cputime64_t cur_wall_time;
+    cputime64_t busy_time;
+
+    cur_wall_time = jiffies64_to_cputime64(get_jiffies_64());
+    busy_time = cputime64_add(kstat_cpu(cpu).cpustat.user,
+			      kstat_cpu(cpu).cpustat.system);
+
+    busy_time = cputime64_add(busy_time, kstat_cpu(cpu).cpustat.irq);
+    busy_time = cputime64_add(busy_time, kstat_cpu(cpu).cpustat.softirq);
+    busy_time = cputime64_add(busy_time, kstat_cpu(cpu).cpustat.steal);
+    busy_time = cputime64_add(busy_time, kstat_cpu(cpu).cpustat.nice);
+
+    idle_time = cputime64_sub(cur_wall_time, busy_time);
+    if (wall)
+	*wall = (cputime64_t)jiffies_to_usecs(cur_wall_time);
+
+    return (cputime64_t)jiffies_to_usecs(idle_time);
 }
 
 static inline cputime64_t get_cpu_idle_time(unsigned int cpu, cputime64_t *wall)
@@ -253,6 +287,9 @@ show_one(up_threshold, up_threshold);
 show_one(ignore_nice_load, ignore_nice);
 show_one(powersave_bias, powersave_bias);
 show_one(min_timeinstate, min_timeinstate);
+#ifdef CONFIG_HAS_EARLYSUSPEND
+show_one(screenoff_maxfreq, screenoff_maxfreq);
+#endif
 
 static ssize_t store_sampling_rate(struct kobject *a, struct attribute *b,
 				   const char *buf, size_t count)
@@ -323,7 +360,7 @@ static ssize_t store_ignore_nice_load(struct kobject *a, struct attribute *b,
 	dbs_info->prev_cpu_idle = get_cpu_idle_time(j,
 						    &dbs_info->prev_cpu_wall);
 	if (dbs_tuners_ins.ignore_nice)
-	    dbs_info->prev_cpu_nice = kcpustat_cpu(j).cpustat[CPUTIME_NICE];
+	    dbs_info->prev_cpu_nice = kstat_cpu(j).cpustat.nice;
 
     }
     return count;
@@ -359,12 +396,29 @@ static ssize_t store_min_timeinstate(struct kobject *a, struct attribute *b,
     return count;
 }
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static ssize_t store_screenoff_maxfreq(struct kobject *a, struct attribute *b,
+				  const char *buf, size_t count)
+{
+    unsigned int input;
+    int ret;
+    ret = sscanf(buf, "%u", &input);
+    if (ret != 1 || input > 1)
+	return -EINVAL;
+    dbs_tuners_ins.screenoff_maxfreq = input;
+    return count;
+}
+#endif
+
 define_one_global_rw(sampling_rate);
 define_one_global_rw(io_is_busy);
 define_one_global_rw(up_threshold);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(powersave_bias);
 define_one_global_rw(min_timeinstate);
+#ifdef CONFIG_HAS_EARLYSUSPEND
+define_one_global_rw(screenoff_maxfreq);
+#endif
 
 static struct attribute *dbs_attributes[] = {
     &sampling_rate_min.attr,
@@ -374,6 +428,9 @@ static struct attribute *dbs_attributes[] = {
     &powersave_bias.attr,
     &io_is_busy.attr,
     &min_timeinstate.attr,
+#ifdef CONFIG_HAS_EARLYSUSPEND
+    &screenoff_maxfreq.attr,
+#endif
     NULL
 };
 
@@ -395,6 +452,26 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
     policy = this_dbs_info->cur_policy;
 
     current_sampling_rate = dbs_tuners_ins.sampling_rate;
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+    if (suspended && dbs_tuners_ins.screenoff_maxfreq) {
+	/* if we are already at full speed then break out early */
+	if (!dbs_tuners_ins.powersave_bias) {
+	    if (policy->cur == policy->max)
+		return;
+
+	    __cpufreq_driver_target(policy, policy->max,
+				    CPUFREQ_RELATION_H);
+	} else {
+	    int freq = powersave_bias_target(policy, policy->max,
+					     CPUFREQ_RELATION_H);
+	    __cpufreq_driver_target(policy, freq,
+				    CPUFREQ_RELATION_L);
+	}
+	current_sampling_rate = dbs_tuners_ins.min_timeinstate;
+	return;
+    }
+#endif
 
     /*
      * Every sampling_rate, we check, if current idle time is less
@@ -423,21 +500,24 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	cur_idle_time = get_cpu_idle_time(j, &cur_wall_time);
 	cur_iowait_time = get_cpu_iowait_time(j, &cur_wall_time);
 
-	wall_time = (unsigned int) (cur_wall_time - j_dbs_info->prev_cpu_wall);
+	wall_time = (unsigned int) cputime64_sub(cur_wall_time,
+						 j_dbs_info->prev_cpu_wall);
 	j_dbs_info->prev_cpu_wall = cur_wall_time;
 
-	idle_time = (unsigned int) (cur_idle_time - j_dbs_info->prev_cpu_idle);
+	idle_time = (unsigned int) cputime64_sub(cur_idle_time,
+						 j_dbs_info->prev_cpu_idle);
 	j_dbs_info->prev_cpu_idle = cur_idle_time;
 
-	iowait_time = (unsigned int) (cur_iowait_time - j_dbs_info->prev_cpu_iowait);
+	iowait_time = (unsigned int) cputime64_sub(cur_iowait_time,
+						   j_dbs_info->prev_cpu_iowait);
 	j_dbs_info->prev_cpu_iowait = cur_iowait_time;
 
 	if (dbs_tuners_ins.ignore_nice) {
 	    cputime64_t cur_nice;
 	    unsigned long cur_nice_jiffies;
 
-	    cur_nice = kcpustat_cpu(j).cpustat[CPUTIME_NICE] -
-						 j_dbs_info->prev_cpu_nice;
+	    cur_nice = cputime64_sub(kstat_cpu(j).cpustat.nice,
+				     j_dbs_info->prev_cpu_nice);
 	    /*
 	     * Assumption: nice time between sampling periods will
 	     * be less than 2^32 jiffies for 32 bit sys
@@ -445,7 +525,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	    cur_nice_jiffies = (unsigned long)
 		cputime64_to_jiffies64(cur_nice);
 
-	    j_dbs_info->prev_cpu_nice = kcpustat_cpu(j).cpustat[CPUTIME_NICE];
+	    j_dbs_info->prev_cpu_nice = kstat_cpu(j).cpustat.nice;
 	    idle_time += jiffies_to_usecs(cur_nice_jiffies);
 	}
 
@@ -627,7 +707,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 							  &j_dbs_info->prev_cpu_wall);
 	    if (dbs_tuners_ins.ignore_nice) {
 		j_dbs_info->prev_cpu_nice =
-		    kcpustat_cpu(j).cpustat[CPUTIME_NICE];
+		    kstat_cpu(j).cpustat.nice;
 	    }
 	}
 	this_dbs_info->cpu = cpu;
@@ -716,6 +796,10 @@ static int __init cpufreq_gov_dbs_init(void)
 	min_sampling_rate =
 	    MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10);
     }
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+    register_early_suspend(&lazy_suspend);
+#endif
 
     return cpufreq_register_governor(&cpufreq_gov_lazy);
 }
