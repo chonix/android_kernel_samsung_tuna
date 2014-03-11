@@ -2003,7 +2003,8 @@ void __perf_event_task_sched_out(struct task_struct *task,
 		perf_cgroup_sched_out(task);
 }
 
-static void task_ctx_sched_out(struct perf_event_context *ctx)
+static void task_ctx_sched_out(struct perf_event_context *ctx,
+			       enum event_type_t event_type)
 {
 	struct perf_cpu_context *cpuctx = __get_cpu_context(ctx);
 
@@ -2013,7 +2014,7 @@ static void task_ctx_sched_out(struct perf_event_context *ctx)
 	if (WARN_ON_ONCE(ctx != cpuctx->task_ctx))
 		return;
 
-	ctx_sched_out(ctx, cpuctx, EVENT_ALL);
+	ctx_sched_out(ctx, cpuctx, event_type);
 	cpuctx->task_ctx = NULL;
 }
 
@@ -2123,6 +2124,19 @@ static void cpu_ctx_sched_in(struct perf_cpu_context *cpuctx,
 	struct perf_event_context *ctx = &cpuctx->ctx;
 
 	ctx_sched_in(ctx, cpuctx, event_type, task);
+}
+
+static void task_ctx_sched_in(struct perf_event_context *ctx,
+			      enum event_type_t event_type)
+{
+	struct perf_cpu_context *cpuctx;
+
+	cpuctx = __get_cpu_context(ctx);
+	if (cpuctx->task_ctx == ctx)
+		return;
+
+	ctx_sched_in(ctx, cpuctx, event_type, NULL);
+	cpuctx->task_ctx = ctx;
 }
 
 static void perf_event_context_sched_in(struct perf_event_context *ctx,
@@ -2379,7 +2393,7 @@ static void perf_rotate_context(struct perf_cpu_context *cpuctx)
 
 	cpu_ctx_sched_out(cpuctx, EVENT_FLEXIBLE);
 	if (ctx)
-		ctx_sched_out(ctx, cpuctx, EVENT_FLEXIBLE);
+		task_ctx_sched_out(ctx, EVENT_FLEXIBLE);
 
 	rotate_ctx(&cpuctx->ctx);
 	if (ctx)
@@ -2387,7 +2401,7 @@ static void perf_rotate_context(struct perf_cpu_context *cpuctx)
 
 	cpu_ctx_sched_in(cpuctx, EVENT_FLEXIBLE, current);
 	if (ctx)
-		ctx_sched_in(ctx, cpuctx, EVENT_FLEXIBLE, current);
+		task_ctx_sched_in(ctx, EVENT_FLEXIBLE);
 
 done:
 	if (remove)
@@ -2451,10 +2465,6 @@ static void perf_event_enable_on_exec(struct perf_event_context *ctx)
 	task_ctx_sched_out(ctx, EVENT_ALL);
 
 	raw_spin_lock(&ctx->lock);
-<<<<<<< HEAD
-=======
-	task_ctx_sched_out(ctx);
->>>>>>> 55ac3b5... perf: Remove task_ctx_sched_in()
 
 	list_for_each_entry(event, &ctx->pinned_groups, group_entry) {
 		ret = event_enable_on_exec(event, ctx);
@@ -6823,10 +6833,6 @@ static void perf_event_exit_task_context(struct task_struct *child, int ctxn)
 	 * incremented the context's refcount before we do put_ctx below.
 	 */
 	raw_spin_lock(&child_ctx->lock);
-<<<<<<< HEAD
-=======
-	task_ctx_sched_out(child_ctx);
->>>>>>> 55ac3b5... perf: Remove task_ctx_sched_in()
 	child->perf_event_ctxp[ctxn] = NULL;
 	/*
 	 * If this context is a clone; unclone it so it can't get
