@@ -906,7 +906,6 @@ static void __init syscontrol_setup_regs(void)
 	v |= OMAP4_LPDDR21_VREF_AUTO_EN_CA_MASK | OMAP4_LPDDR21_VREF_AUTO_EN_DQ_MASK;
         omap4_ctrl_pad_writel(v, OMAP4_CTRL_MODULE_PAD_CORE_CONTROL_LPDDR2IO2_3);
 
-<<<<<<< HEAD
 	/*
 	 * Workaround for CK differential IO PADn, PADp values due to bug in
 	 * EMIF CMD phy.
@@ -917,12 +916,6 @@ static void __init syscontrol_setup_regs(void)
 	v = omap4_ctrl_pad_readl(OMAP4_CTRL_MODULE_PAD_CORE_CONTROL_LPDDR2IO2_2);
 	v &= ~OMAP4_LPDDR2IO2_GR10_WD_MASK;
 	omap4_ctrl_pad_writel(v, OMAP4_CTRL_MODULE_PAD_CORE_CONTROL_LPDDR2IO2_2);
-=======
-	syscontrol_lpddr_clk_io_errata(true);
-
-	if (cpu_is_omap446x())
-		syscontrol_lpddr2io_config_update_466_mhz();
->>>>>>> b7f1190... OMAP4: EMIF: code cleanup and clarification
 }
 
 static void __init prcm_setup_regs(void)
