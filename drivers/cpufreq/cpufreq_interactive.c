@@ -99,10 +99,7 @@ static unsigned long timer_rate = DEFAULT_TIMER_RATE;
  */
 #define DEFAULT_ABOVE_HISPEED_DELAY 10000
 static unsigned long above_hispeed_delay_val = DEFAULT_ABOVE_HISPEED_DELAY;
-<<<<<<< HEAD
 
-=======
->>>>>>> 0e03f06... cpufreq: interactive: proper touch boost implementation
 /* 500ms - 0.5s */
 #define DEFAULT_BOOSTPULSE_DURATION 500000
 /* Duration of a boot pulse in usecs */
@@ -114,11 +111,7 @@ static u64 boostpulse_endtime;
  * The CPU will be boosted to this frequency when the screen is
  * touched. input_boost needs to be enabled.
  */
-<<<<<<< HEAD
 #define DEFAULT_INPUT_BOOST_FREQ 1228800
-=======
-#define DEFAULT_INPUT_BOOST_FREQ 920000
->>>>>>> 0e03f06... cpufreq: interactive: proper touch boost implementation
 static int input_boost_freq = DEFAULT_INPUT_BOOST_FREQ;
 
 /*
@@ -336,35 +329,26 @@ static void cpufreq_interactive_timer(unsigned long data)
 	boosted = now < boostpulse_endtime;
 
 	if (cpu_load >= go_hispeed_load) {
-<<<<<<< HEAD
 		new_freq = choose_freq(pcpu, loadadjfreq);
 
 		if (new_freq < hispeed_freq)
 			new_freq = hispeed_freq;
 	} else if (boosted) {
 		new_freq = input_boost_freq;
-=======
-	new_freq = choose_freq(pcpu, loadadjfreq);
-
-	if (new_freq < hispeed_freq)
-	new_freq = hispeed_freq;
-	} else if (boosted) {
-	new_freq = input_boost_freq;
->>>>>>> 0e03f06... cpufreq: interactive: proper touch boost implementation
 	} else {
-	new_freq = choose_freq(pcpu, loadadjfreq);
+		new_freq = choose_freq(pcpu, loadadjfreq);
 	}
 
 	if (pcpu->target_freq >= hispeed_freq &&
-	new_freq > pcpu->target_freq &&
-	now - pcpu->hispeed_validate_time < above_hispeed_delay_val) {
-	trace_cpufreq_interactive_notyet(
-	data, cpu_load, pcpu->target_freq,
-	pcpu->policy->cur, new_freq);
-	goto rearm;
+	    new_freq > pcpu->target_freq &&
+	    now - pcpu->hispeed_validate_time < above_hispeed_delay_val) {
+		trace_cpufreq_interactive_notyet(
+			data, cpu_load, pcpu->target_freq,
+			pcpu->policy->cur, new_freq);
+		goto rearm;
 	}
 
-pcpu->hispeed_validate_time = now;
+	pcpu->hispeed_validate_time = now;
 
 	if (cpufreq_frequency_table_target(pcpu->policy, pcpu->freq_table,
 					   new_freq, CPUFREQ_RELATION_L,

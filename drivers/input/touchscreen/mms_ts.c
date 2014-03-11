@@ -112,25 +112,16 @@ static void mms_ts_early_suspend(struct early_suspend *h);
 static void mms_ts_late_resume(struct early_suspend *h);
 #endif
 
-<<<<<<< HEAD
 #define BOOSTPULSE "/sys/devices/system/cpu/cpufreq/interactive/boostpulse"
 
 struct boost_tuna {
 	int boostpulse_fd;
-=======
-
-#define BOOSTPULSE "/sys/devices/system/cpu/cpufreq/interactive/boostpulse"
-
-struct boost_tuna {
-    int boostpulse_fd;
->>>>>>> 0e03f06... cpufreq: interactive: proper touch boost implementation
 };
 
 static struct boost_tuna boost;
 
 static int boostpulse_open(void)
 {
-<<<<<<< HEAD
 	if (boost.boostpulse_fd < 0)
 	{
 		boost.boostpulse_fd = sys_open(BOOSTPULSE, O_WRONLY, 0);
@@ -143,20 +134,6 @@ static int boostpulse_open(void)
 	}
 
 	return boost.boostpulse_fd;
-=======
-    if (boost.boostpulse_fd < 0)
-    {
-        boost.boostpulse_fd = sys_open(BOOSTPULSE, O_WRONLY, 0);
-
-        if (boost.boostpulse_fd < 0)
-        {
-            pr_info("Error opening %s\n", BOOSTPULSE);
-            return -1;		
-        }
-    }
-
-    return boost.boostpulse_fd;
->>>>>>> 0e03f06... cpufreq: interactive: proper touch boost implementation
 }
 
 static irqreturn_t mms_ts_interrupt(int irq, void *dev_id)
@@ -168,11 +145,7 @@ static irqreturn_t mms_ts_interrupt(int irq, void *dev_id)
 	int i;
 	int sz;
 	u8 reg = MMS_INPUT_EVENT0;
-<<<<<<< HEAD
 	int len;
-=======
-    int len;
->>>>>>> 0e03f06... cpufreq: interactive: proper touch boost implementation
 
 	struct i2c_msg msg[] = {
 		{
@@ -211,7 +184,6 @@ static irqreturn_t mms_ts_interrupt(int irq, void *dev_id)
 		       DUMP_PREFIX_OFFSET, 32, 1, buf, sz, false);
 #endif
 
-<<<<<<< HEAD
 	if (boostpulse_open() >= 0)
 	{
 		len = sys_write(boost.boostpulse_fd, "1", sizeof(BOOSTPULSE));
@@ -221,26 +193,6 @@ static irqreturn_t mms_ts_interrupt(int irq, void *dev_id)
 			pr_info("Error writing to %s\n", BOOSTPULSE);			
 		}
 	}
-=======
-    if (boostpulse_open() >= 0)
-    {
-        len = sys_write(boost.boostpulse_fd, "1", sizeof(BOOSTPULSE));
-
-        if (len < 0)
-        {
-            pr_info("Error writing to %s\n", BOOSTPULSE);			
-        }
-    }
-
-#ifdef CONFIG_TOUCH_WAKE
-	if (device_is_suspended())
-	    {
-		touch_press();
-		
-		goto out;
-	    }
-#endif
->>>>>>> 0e03f06... cpufreq: interactive: proper touch boost implementation
 
 	for (i = 0; i < sz; i += FINGER_EVENT_SZ) {
 		u8 *tmp = &buf[i];
@@ -848,11 +800,7 @@ static int __devinit mms_ts_probe(struct i2c_client *client,
 	struct input_dev *input_dev;
 	int ret = 0;
 
-<<<<<<< HEAD
 	boost.boostpulse_fd = -1;
-=======
-    boost.boostpulse_fd = -1;
->>>>>>> 0e03f06... cpufreq: interactive: proper touch boost implementation
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_I2C))
 		return -EIO;
