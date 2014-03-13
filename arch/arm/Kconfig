@@ -39,13 +39,10 @@ config ARM
 	  Europe.  There is an ARM Linux project with a web page at
 	  <http://www.arm.linux.org.uk/>.
 
-<<<<<<< HEAD
 config ARM_HAS_SG_CHAIN
 	bool
 	default y
 
-=======
->>>>>>> parent of e9c84ed... ARM: Allow SoCs to enable scatterlist chaining
 config HAVE_PWM
 	bool
 
