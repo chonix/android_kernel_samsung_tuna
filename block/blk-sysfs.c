@@ -25,9 +25,15 @@ queue_var_show(unsigned long var, char *page)
 static ssize_t
 queue_var_store(unsigned long *var, const char *page, size_t count)
 {
-	char *p = (char *) page;
+	int err;
+	unsigned long v;
 
-	*var = simple_strtoul(p, &p, 10);
+	err = kstrtoul(page, 10, &v);
+	if (err || v > UINT_MAX)
+		return -EINVAL;
+
+	*var = v;
+
 	return count;
 }
 
