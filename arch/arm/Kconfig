@@ -42,10 +42,7 @@ config ARM
 <<<<<<< HEAD
 config ARM_HAS_SG_CHAIN
 	bool
-<<<<<<< HEAD
 	default y
-=======
->>>>>>> e9c84ed... ARM: Allow SoCs to enable scatterlist chaining
 
 =======
 >>>>>>> parent of e9c84ed... ARM: Allow SoCs to enable scatterlist chaining
