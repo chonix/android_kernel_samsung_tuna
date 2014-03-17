@@ -284,11 +284,7 @@
  * /dev/random.  Should be enough to do a significant reseed.
  */
 <<<<<<< HEAD
-<<<<<<< HEAD
 static int random_read_wakeup_thresh = 64;
-=======
-static int random_read_wakeup_thresh = 1024;
->>>>>>> a75f7d8... More power to Entropy regeneration.
 =======
 static int random_read_wakeup_thresh = 1024;
 >>>>>>> a75f7d8... More power to Entropy regeneration.
