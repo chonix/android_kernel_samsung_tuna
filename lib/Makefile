@@ -114,6 +114,7 @@ obj-$(CONFIG_AVERAGE) += average.o
 obj-$(CONFIG_CPU_RMAP) += cpu_rmap.o
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 obj-$(CONFIG_GENERIC_STRNCPY_FROM_USER) += strncpy_from_user.o
 obj-$(CONFIG_GENERIC_STRNLEN_USER) += strnlen_user.o
 
@@ -124,6 +125,8 @@ CFLAGS_snappy.o += $(call cc-disable-warning, declaration-after-statement) \
 obj-$(CONFIG_SNAPPY) += snappy.o
 >>>>>>> c45bd7d... Add the snappy-c compressor to lib v2
 
+=======
+>>>>>>> parent of c45bd7d... Add the snappy-c compressor to lib v2
 hostprogs-y	:= gen_crc32table
 clean-files	:= crc32table.h
 

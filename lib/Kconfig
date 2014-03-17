@@ -263,6 +263,7 @@ config AVERAGE
 	  If unsure, say N.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 config CORDIC
 	tristate "Cordic function"
 	help
@@ -277,4 +278,6 @@ config SNAPPY
 		  compresses and decompresses extremly fast.
 >>>>>>> c45bd7d... Add the snappy-c compressor to lib v2
 
+=======
+>>>>>>> parent of c45bd7d... Add the snappy-c compressor to lib v2
 endmenu
