@@ -9451,5 +9451,6 @@ struct cgroup_subsys cpuacct_subsys = {
 	.populate = cpuacct_populate,
 	.subsys_id = cpuacct_subsys_id,
 };
+EXPORT_SYMBOL_GPL (nr_running);
 #endif	/* CONFIG_CGROUP_CPUACCT */
 
