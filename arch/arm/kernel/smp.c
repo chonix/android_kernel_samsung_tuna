@@ -56,7 +56,7 @@ enum ipi_msg_type {
 	IPI_CPU_BACKTRACE,
 };
 
-+int __cpuinit __cpu_up(unsigned int cpu, struct task_struct *idle)
+int __cpuinit __cpu_up(unsigned int cpu, struct task_struct *idle)
 {
 	pgd_t *pgd;
 	int ret;
