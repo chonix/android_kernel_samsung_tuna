@@ -18,11 +18,25 @@
 #include <linux/backing-dev.h>
 #include "internal.h"
 
+#ifdef CONFIG_ASYNC_FSYNC
+#include <linux/statfs.h>
+#endif
+
+
 bool fsync_enabled = false;
 module_param(fsync_enabled, bool, 0755);
 
 #define VALID_FLAGS (SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE| \
 			SYNC_FILE_RANGE_WAIT_AFTER)
+
+#ifdef CONFIG_ASYNC_FSYNC
+#define FLAG_ASYNC_FSYNC        0x1
+static struct workqueue_struct *fsync_workqueue = NULL;
+struct fsync_work {
+  struct work_struct work;
+  char pathname[256];
+};
+#endif
 
 /*
  * Do the filesystem syncing work. For simple filesystems
