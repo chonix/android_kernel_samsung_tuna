@@ -280,7 +280,7 @@ void machine_shutdown(void)
 	 * one of the stopped CPUs.
 	 */
 	preempt_disable();
-
+	local_irq_disable();
 	smp_send_stop();
 #endif
 }
