@@ -213,23 +213,6 @@
 	str	r2, [r0]		@ hardware version
 	.endm
 
-.macro define_cache_functions name:req
-	.align 2
-	.type	\name\()_cache_fns, #object
-ENTRY(\name\()_cache_fns)
-	.long	\name\()_flush_icache_all
-	.long	\name\()_flush_kern_cache_all
-	.long   \name\()_flush_kern_cache_louis
-	.long	\name\()_flush_user_cache_all
-	.long	\name\()_flush_user_cache_range
-	.long	\name\()_coherent_kern_range
-	.long	\name\()_coherent_user_range
-	.long	\name\()_flush_kern_dcache_area
-	.long	\name\()_dma_map_area
-	.long	\name\()_dma_unmap_area
-	.long	\name\()_dma_flush_range
-	.size	\name\()_cache_fns, . - \name\()_cache_fns
-.endm
 
 /*
  * Xscale set_pte_ext translation, split into two halves to cope

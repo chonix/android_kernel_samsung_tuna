@@ -170,7 +170,6 @@ int __cpu_disable(void)
 	 * from the vm mask set of all processes.
 	 */
 	flush_cache_all();
-	flush_cache_louis();
 	local_flush_tlb_all();
 
 	read_lock(&tasklist_lock);
