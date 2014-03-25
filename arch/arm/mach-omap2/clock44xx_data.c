@@ -84,6 +84,7 @@ static struct clk slimbus_clk = {
 
 static struct clk sys_32k_ck = {
 	.name		= "sys_32k_ck",
+	.clkdm_name	= "prm_clkdm",
 	.rate		= 32768,
 	.ops		= &clkops_null,
 };
@@ -1238,6 +1239,7 @@ static const struct clksel l3_div_div[] = {
 static struct clk l3_div_ck = {
 	.name		= "l3_div_ck",
 	.parent		= &div_core_ck,
+	.clkdm_name	= "cm_clkdm",
 	.clksel		= l3_div_div,
 	.clksel_reg	= OMAP4430_CM_CLKSEL_CORE,
 	.clksel_mask	= OMAP4430_CLKSEL_L3_MASK,
