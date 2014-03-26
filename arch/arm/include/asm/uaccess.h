@@ -116,7 +116,7 @@ extern int __get_user_4(void *);
 		"bl	__get_user_" #__s				\
 		: "=&r" (__e), "=r" (__r2)				\
 		: "0" (__p), "r" (__l)					\
-		: __GUP_CLOBBER_##__s)		
+		: __GUP_CLOBBER_##__s)
 
 #define get_user(x,p)							\
 	({								\
@@ -130,10 +130,10 @@ extern int __get_user_4(void *);
 			__get_user_x(__r2, __p, __e, __l, 1);		\
 			break;						\
 		case 2:							\
-			__get_user_x(__r2, __p, __e, __l, 4);		\
+			__get_user_x(__r2, __p, __e, __l, 2);		\
 			break;						\
 		case 4:							\
-	       		__get_user_x(__r2, __p, __e, 4, "lr");		\
+			__get_user_x(__r2, __p, __e, __l, 4);		\
 			break;						\
 		default: __e = __get_user_bad(); break;			\
 		}							\
