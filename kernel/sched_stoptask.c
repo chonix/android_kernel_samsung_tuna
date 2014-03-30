@@ -1,4 +1,3 @@
-#include "sched.h"
 /*
  * stop-task scheduling class.
  *
@@ -81,7 +80,7 @@ get_rr_interval_stop(struct rq *rq, struct task_struct *task)
 /*
  * Simple, special scheduling class for the per-CPU stop tasks:
  */
-const struct sched_class stop_sched_class = {
+static const struct sched_class stop_sched_class = {
 	.next			= &rt_sched_class,
 
 	.enqueue_task		= enqueue_task_stop,
