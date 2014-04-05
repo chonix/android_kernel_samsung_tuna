@@ -274,4 +274,20 @@ endif
 source "fs/nls/Kconfig"
 source "fs/dlm/Kconfig"
 
+config DYNAMIC_FSYNC
+	bool "dynamic file sync control"
+	default n
+	help
+	   An experimental file sync control using Android's early suspend / late resume drivers
+
+config ASYNC_FSYNC
+	bool "asynchronous fsync"
+	default y
+
+config AIO_OPTIMIZATION
+	bool "AIO kernel optimization patches"
+	default y
+	help
+	  An experimental AIO FS kernel optimization
+
 endmenu
