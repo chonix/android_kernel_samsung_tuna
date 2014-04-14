@@ -3522,7 +3522,9 @@ static struct omap_clk omap44xx_clks[] = {
 	CLK("omap_timer.8",	"sys_ck",	&syc_clk_div_ck,	CK_44XX),
 };
 
-#define MAX_L3_OPP50_RATE		116666666
+#define L3_OPP50_RATE			100000000
+#define DPLL_CORE_M2_OPP50_RATE		400000000
+#define DPLL_CORE_M2_OPP100_RATE	800000000
 #define DPLL_CORE_M3_OPP50_RATE		200000000
 #define DPLL_CORE_M3_OPP100_RATE	320000000
 #define DPLL_CORE_M6_OPP50_RATE		200000000
@@ -3574,6 +3576,7 @@ static int omap4_clksel_set_rate(struct clk *clk, unsigned long rate)
 }
 
 struct virt_l3_ck_deps {
+	unsigned long core_m2_rate;
 	unsigned long core_m3_rate;
 	unsigned long core_m6_rate;
 	unsigned long core_m7_rate;
@@ -3587,6 +3590,7 @@ struct virt_l3_ck_deps {
 
 static struct virt_l3_ck_deps omap4_virt_l3_clk_deps[NO_OF_L3_OPPS] = {
 	{ /* OPP 50 */
+		.core_m2_rate = DPLL_CORE_M2_OPP50_RATE,
 		.core_m3_rate = DPLL_CORE_M3_OPP50_RATE,
 		.core_m6_rate = DPLL_CORE_M6_OPP50_RATE,
 		.core_m7_rate = DPLL_CORE_M7_OPP50_RATE,
@@ -3594,6 +3598,7 @@ static struct virt_l3_ck_deps omap4_virt_l3_clk_deps[NO_OF_L3_OPPS] = {
 		.per_m6_rate = DPLL_PER_M6_OPP50_RATE,
 	},
 	{ /* OPP 100 */
+		.core_m2_rate = DPLL_CORE_M2_OPP100_RATE,
 		.core_m3_rate = DPLL_CORE_M3_OPP100_RATE,
 		.core_m6_rate = DPLL_CORE_M6_OPP100_RATE,
 		.core_m7_rate = DPLL_CORE_M7_OPP100_RATE,
@@ -3606,7 +3611,7 @@ static int omap4_virt_l3_set_rate(struct clk *clk, unsigned long rate)
 {
 	struct virt_l3_ck_deps *l3_deps;
 
-	if (rate <= clk->round_rate(clk, MAX_L3_OPP50_RATE))
+	if (rate <= L3_OPP50_RATE)
 		l3_deps = &omap4_virt_l3_clk_deps[L3_OPP_50_INDEX];
 	else
 		l3_deps = &omap4_virt_l3_clk_deps[L3_OPP_100_INDEX];
@@ -3617,7 +3622,7 @@ static int omap4_virt_l3_set_rate(struct clk *clk, unsigned long rate)
 	omap4_clksel_set_rate(&dpll_per_m3x2_ck, l3_deps->per_m3_rate);
 	omap4_clksel_set_rate(&dpll_per_m6x2_ck, l3_deps->per_m6_rate);
 	omap4_clksel_set_rate(&dpll_core_m5x2_ck, rate * 2);
-	omap4_clksel_set_rate(&dpll_core_m2_ck, rate * 4);
+	omap4_clksel_set_rate(&dpll_core_m2_ck, l3_deps->core_m2_rate);
 
 	clk->rate = rate;
 	return 0;
