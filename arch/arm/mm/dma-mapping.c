@@ -129,6 +129,8 @@ static void __dma_free_buffer(struct page *page, size_t size)
  */
 static pte_t *consistent_pte[NUM_CONSISTENT_PTES];
 
+#define DEFAULT_CONSISTENT_DMA_SIZE (2*SZ_2M)
+
 #include "vmregion.h"
 
 static struct arm_vmregion_head consistent_head = {
