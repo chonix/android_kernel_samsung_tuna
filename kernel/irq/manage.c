@@ -1455,11 +1455,7 @@ int request_any_context_irq(unsigned int irq, irq_handler_t handler,
 }
 EXPORT_SYMBOL_GPL(request_any_context_irq);
 
-<<<<<<< HEAD
 void enable_percpu_irq(unsigned int irq, unsigned int type)
-=======
-void enable_percpu_irq(unsigned int irq)
->>>>>>> b551e19... genirq: Add support for per-cpu dev_id interrupts
 {
 	unsigned int cpu = smp_processor_id();
 	unsigned long flags;
@@ -1468,7 +1464,6 @@ void enable_percpu_irq(unsigned int irq)
 	if (!desc)
 		return;
 
-<<<<<<< HEAD
 	type &= IRQ_TYPE_SENSE_MASK;
 	if (type != IRQ_TYPE_NONE) {
 		int ret;
@@ -1483,9 +1478,6 @@ void enable_percpu_irq(unsigned int irq)
 
 	irq_percpu_enable(desc, cpu);
 out:
-=======
-	irq_percpu_enable(desc, cpu);
->>>>>>> b551e19... genirq: Add support for per-cpu dev_id interrupts
 	irq_put_desc_unlock(desc, flags);
 }
 
