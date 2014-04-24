@@ -321,7 +321,7 @@ struct task_group root_task_group;
 /* CFS-related fields in a runqueue */
 struct cfs_rq {
 	struct load_weight load;
-	unsigned long nr_running, h_nr_running;
+	unsigned long nr_running; h_nr_running;
 
 	u64 exec_clock;
 	u64 min_vruntime;
@@ -7964,11 +7964,15 @@ static void init_rt_rq(struct rt_rq *rt_rq, struct rq *rq)
 #ifdef CONFIG_SMP
 	rt_rq->highest_prio.next = MAX_RT_PRIO;
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 #endif
 #endif
 #ifdef CONFIG_SMP
 >>>>>>> parent of 4d05a96... sched: Separate group-scheduling code more clearly
+=======
+#ifdef CONFIG_SMP
+>>>>>>> parent of dc4cfd2... sched.c derp
 	rt_rq->rt_nr_migratory = 0;
 	rt_rq->overloaded = 0;
 	plist_head_init(&rt_rq->pushable_tasks);
