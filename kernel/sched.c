@@ -321,7 +321,7 @@ struct task_group root_task_group;
 /* CFS-related fields in a runqueue */
 struct cfs_rq {
 	struct load_weight load;
-	unsigned long nr_running; h_nr_running;
+	unsigned long nr_running, h_nr_running;
 
 	u64 exec_clock;
 	u64 min_vruntime;
@@ -393,6 +393,7 @@ struct cfs_rq {
 #endif
 #endif
 };
+
 #ifdef CONFIG_FAIR_GROUP_SCHED
 #ifdef CONFIG_CFS_BANDWIDTH
 static inline struct cfs_bandwidth *tg_cfs_bandwidth(struct task_group *tg)
@@ -428,7 +429,7 @@ static inline struct cfs_bandwidth *tg_cfs_bandwidth(struct task_group *tg)
 }
 #endif /* CONFIG_CFS_BANDWIDTH */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
-
+ 
 /* Real-Time classes' related field in a runqueue: */
 struct rt_rq {
 	struct rt_prio_array active;
@@ -7979,7 +7980,7 @@ static void init_tg_cfs_entry(struct task_group *tg, struct cfs_rq *cfs_rq,
 	cfs_rq->load_stamp = 1;
 #endif
 	init_cfs_rq_runtime(cfs_rq);
-  
+
 	tg->cfs_rq[cpu] = cfs_rq;
 	tg->se[cpu] = se;
 
@@ -8118,7 +8119,7 @@ void __init sched_init(void)
 		 * We achieve this by letting root_task_group's tasks sit
 		 * directly in rq->cfs (i.e root_task_group->se[] = NULL).
 		 */
-		init_cfs_bandwidth(&root_task_group.cfs_bandwidth);
+		init_cfs_bandwidth(&root_task_group.cfs_bandwidth);		
 		init_tg_cfs_entry(&root_task_group, &rq->cfs, NULL, i, NULL);
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 
@@ -9063,8 +9064,6 @@ static DEFINE_MUTEX(cfs_constraints_mutex);
 const u64 max_cfs_quota_period = 1 * NSEC_PER_SEC; /* 1s */
 const u64 min_cfs_quota_period = 1 * NSEC_PER_MSEC; /* 1ms */
 
-static int __cfs_schedulable(struct task_group *tg, u64 period, u64 runtime);
-
 static int tg_set_cfs_bandwidth(struct task_group *tg, u64 period, u64 quota)
 {
 	int i, ret = 0;
@@ -9340,6 +9339,7 @@ struct cgroup_subsys cpu_cgroup_subsys = {
 #endif	/* CONFIG_CGROUP_SCHED */
 
 #ifdef CONFIG_CGROUP_CPUACCT
+
 /*
  * CPU accounting code for task groups.
  *
@@ -9682,4 +9682,3 @@ struct cgroup_subsys cpuacct_subsys = {
 	.subsys_id = cpuacct_subsys_id,
 };
 #endif	/* CONFIG_CGROUP_CPUACCT */
-
