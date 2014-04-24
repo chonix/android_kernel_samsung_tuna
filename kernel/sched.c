@@ -7965,12 +7965,17 @@ static void init_rt_rq(struct rt_rq *rt_rq, struct rq *rq)
 	rt_rq->highest_prio.next = MAX_RT_PRIO;
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 #endif
 #endif
 #ifdef CONFIG_SMP
 >>>>>>> parent of 4d05a96... sched: Separate group-scheduling code more clearly
 =======
+=======
+#endif
+#endif
+>>>>>>> parent of 4d05a96... sched: Separate group-scheduling code more clearly
 #ifdef CONFIG_SMP
 >>>>>>> parent of dc4cfd2... sched.c derp
 	rt_rq->rt_nr_migratory = 0;
@@ -7999,12 +8004,15 @@ static void init_tg_cfs_entry(struct task_group *tg, struct cfs_rq *cfs_rq,
 	init_cfs_rq(cfs_rq, rq);
 	cfs_rq->tg = tg;
 <<<<<<< HEAD
+<<<<<<< HEAD
 	cfs_rq->rq = rq;
 #ifdef CONFIG_SMP
 	/* allow initial update_cfs_load() to truncate */
 	cfs_rq->load_stamp = 1;
 #endif
 	init_cfs_rq_runtime(cfs_rq);
+=======
+>>>>>>> parent of 4d05a96... sched: Separate group-scheduling code more clearly
 =======
 >>>>>>> parent of 4d05a96... sched: Separate group-scheduling code more clearly
 
