@@ -201,9 +201,15 @@ void omap_thermal_throttle(void)
 		__func__, max_thermal);
 
 	if (!omap_cpufreq_suspended) {
-		cur = omap_getspeed(0);
-		if (cur > max_thermal)
-			omap_cpufreq_scale(max_thermal, cur);
+#ifdef CONFIG_OMAP4_DPLL_CASCADING
+		if (cpu_is_omap44xx() && target_freq > policy->min)
+			omap4_dpll_cascading_blocker_hold(mpu_dev);
+#endif
+ 		omap_cpufreq_scale(mpu_dev, current_target_freq);
+#ifdef CONFIG_OMAP4_DPLL_CASCADING
+		if (cpu_is_omap44xx() && target_freq == policy->min)
+			omap4_dpll_cascading_blocker_release(mpu_dev);
+#endif
 	}
 
 	mutex_unlock(&omap_cpufreq_lock);
