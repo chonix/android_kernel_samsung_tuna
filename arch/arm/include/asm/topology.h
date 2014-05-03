@@ -34,6 +34,10 @@ static inline void store_cpu_topology(unsigned int cpuid) { }
 
 #endif
 
+/* Topology notifier event */
+#define TOPOLOGY_POSTCHANGE 0
+
+
 /* Common values for CPUs */
 #ifndef SD_CPU_INIT
 #define SD_CPU_INIT (struct sched_domain) {				\
