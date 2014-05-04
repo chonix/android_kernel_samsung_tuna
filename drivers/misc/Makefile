@@ -62,3 +62,4 @@ obj-$(CONFIG_BLX)    += blx.o
 obj-$(CONFIG_CUSTOM_VOLTAGE)	+= custom_voltage.o
 obj-y				+= sound_control.o
 obj-$(CONFIG_VIBRATOR_CONTROL)	+= vibrator_control.o
+obj-$(CONFIG_WRITEBACK_CONTROL)  += writeback_control.o
