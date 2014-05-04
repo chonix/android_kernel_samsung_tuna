@@ -103,11 +103,25 @@ static int nabove_hispeed_delay = ARRAY_SIZE(default_above_hispeed_delay);
 /* Non-zero means indefinite speed boost active */
 static int boost_val;
 /* Duration of a boot pulse in usecs */
+<<<<<<< HEAD
 static int boostpulse_duration_val = DEFAULT_MIN_SAMPLE_TIME;
 /* End time of boost pulse in ktime converted to usecs */
 static u64 boostpulse_endtime;
 
 /*
+=======
+static int boostpulse_duration_val = DEFAULT_BOOSTPULSE_DURATION;
+
+/*
+ * The CPU will be boosted to this frequency when the screen is
+ * touched. input_boost needs to be enabled.
+ */
+#define DEFAULT_INPUT_BOOST_FREQ 1036800
+static int input_boost_freq = DEFAULT_INPUT_BOOST_FREQ;
+extern u64 last_input_time;
+
+/*
+>>>>>>> e6e17b7... cpufreq: interactive: add changes to allow for input boost events.
  * Max additional time to wait in idle, beyond timer_rate, at speeds above
  * minimum before wakeup to reduce speed, or -1 if unnecessary.
  */
@@ -394,19 +408,31 @@ static void cpufreq_interactive_timer(unsigned long data)
 	do_div(cputime_speedadj, delta_time);
 	loadadjfreq = (unsigned int)cputime_speedadj * 100;
 	cpu_load = loadadjfreq / pcpu->target_freq;
+<<<<<<< HEAD
 	boosted = boost_val || now < boostpulse_endtime;
+=======
+	boosted = now < (last_input_time + boostpulse_duration_val);
+>>>>>>> e6e17b7... cpufreq: interactive: add changes to allow for input boost events.
 
 	if (cpu_load >= go_hispeed_load || boosted) {
 		if (pcpu->target_freq < hispeed_freq) {
 			new_freq = hispeed_freq;
+<<<<<<< HEAD
 		} else {
 			new_freq = choose_freq(pcpu, loadadjfreq);
 
 			if (new_freq < hispeed_freq)
 				new_freq = hispeed_freq;
 		}
+=======
+>>>>>>> e6e17b7... cpufreq: interactive: add changes to allow for input boost events.
 	} else {
 		new_freq = choose_freq(pcpu, loadadjfreq);
+	}
+
+	if (boosted)
+	{
+		new_freq = input_boost_freq;
 	}
 
 	if (pcpu->target_freq >= hispeed_freq &&
@@ -604,6 +630,7 @@ static int cpufreq_interactive_speedchange_task(void *data)
 	return 0;
 }
 
+<<<<<<< HEAD
 static void cpufreq_interactive_boost(void)
 {
 	int i;
@@ -639,6 +666,8 @@ static void cpufreq_interactive_boost(void)
 		wake_up_process(speedchange_task);
 }
 
+=======
+>>>>>>> e6e17b7... cpufreq: interactive: add changes to allow for input boost events.
 static int cpufreq_interactive_notifier(
 	struct notifier_block *nb, unsigned long val, void *data)
 {
@@ -958,25 +987,6 @@ static ssize_t store_boost(struct kobject *kobj, struct attribute *attr,
 
 define_one_global_rw(boost);
 
-static ssize_t store_boostpulse(struct kobject *kobj, struct attribute *attr,
-				const char *buf, size_t count)
-{
-	int ret;
-	unsigned long val;
-
-	ret = kstrtoul(buf, 0, &val);
-	if (ret < 0)
-		return ret;
-
-	boostpulse_endtime = ktime_to_us(ktime_get()) + boostpulse_duration_val;
-	trace_cpufreq_interactive_boost("pulse");
-	cpufreq_interactive_boost();
-	return count;
-}
-
-static struct global_attr boostpulse =
-	__ATTR(boostpulse, 0200, NULL, store_boostpulse);
-
 static ssize_t show_boostpulse_duration(
 	struct kobject *kobj, struct attribute *attr, char *buf)
 {
@@ -1030,8 +1040,11 @@ static struct attribute *interactive_attributes[] = {
 	&min_sample_time_attr.attr,
 	&timer_rate_attr.attr,
 	&timer_slack.attr,
+<<<<<<< HEAD
 	&boost.attr,
 	&boostpulse.attr,
+=======
+>>>>>>> e6e17b7... cpufreq: interactive: add changes to allow for input boost events.
 	&boostpulse_duration.attr,
 	&io_is_busy_attr.attr,
 	NULL,
