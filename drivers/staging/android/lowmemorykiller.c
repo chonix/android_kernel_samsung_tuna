@@ -35,45 +35,64 @@
 #include <linux/mm.h>
 #include <linux/oom.h>
 #include <linux/sched.h>
+#include <linux/swap.h>
 #include <linux/rcupdate.h>
 #include <linux/notifier.h>
-#include <linux/swap.h>
-#include <linux/ratelimit.h>
+#ifdef CONFIG_MEMORY_HOTPLUG
+#include <linux/memory.h>
+#include <linux/memory_hotplug.h>
+#endif
+
 #ifdef CONFIG_ZRAM_FOR_ANDROID
 #include <linux/fs.h>
+#include <linux/swap.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/mm_inline.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
-#include <linux/cpu.h>
 #include <asm/atomic.h>
 
-#if defined(CONFIG_SMP)
-#define NR_TO_RECLAIM_PAGES 		(1024 * NR_CPUS)/* 4MB*cpu_core, include file pages */
-#define MIN_FREESWAP_PAGES 		(NR_TO_RECLAIM_PAGES*2) /* 4MB*cpu_core*2 */
-#define MIN_RECLAIM_PAGES 		(NR_TO_RECLAIM_PAGES/8)
-#define MIN_CSWAP_INTERVAL 		(10*HZ) /* 10 senconds */
-#else /* CONFIG_SMP */
-#define NR_TO_RECLAIM_PAGES 		1024 /* 4MB, include file pages */
-#define MIN_FREESWAP_PAGES 		(NR_TO_RECLAIM_PAGES*2)  /* 4MB*2 */
-#define MIN_RECLAIM_PAGES 		(NR_TO_RECLAIM_PAGES/8)
-#define MIN_CSWAP_INTERVAL 		(10*HZ) /* 10 senconds */
+#define MIN_FREESWAP_PAGES 8192 /* 32MB */
+#define MIN_RECLAIM_PAGES 512  /* 2MB */
+#define MIN_CSWAP_INTERVAL (10*HZ)  /* 10 senconds */
+#define RTCC_DAEMON_PROC "rtccd"
+#define _KCOMPCACHE_DEBUG 0
+#if _KCOMPCACHE_DEBUG
+#define lss_dbg(x...) printk("lss: " x)
+#else
+#define lss_dbg(x...)
 #endif
 
 struct soft_reclaim {
+	unsigned long nr_total_soft_reclaimed;
+	unsigned long nr_total_soft_scanned;
+	unsigned long nr_last_soft_reclaimed;
+	unsigned long nr_last_soft_scanned;
+	int nr_empty_reclaimed;
+
 	atomic_t kcompcached_running;
 	atomic_t need_to_reclaim;
 	atomic_t lmk_running;
+	atomic_t kcompcached_enable;
+	atomic_t idle_report;
 	struct task_struct *kcompcached;
+	struct task_struct *rtcc_daemon;
 };
 
-static struct soft_reclaim s_reclaim;
+static struct soft_reclaim s_reclaim = {
+	.nr_total_soft_reclaimed = 0,
+	.nr_total_soft_scanned = 0,
+	.nr_last_soft_reclaimed = 0,
+	.nr_last_soft_scanned = 0,
+	.nr_empty_reclaimed = 0,
+	.kcompcached = NULL,
+};
 extern atomic_t kswapd_thread_on;
 static unsigned long prev_jiffy;
-static uint32_t number_of_reclaim_pages = NR_TO_RECLAIM_PAGES;
+int hidden_cgroup_counter = 0;
 static uint32_t minimum_freeswap_pages = MIN_FREESWAP_PAGES;
-static uint32_t minimum_reclaim_pages = MIN_RECLAIM_PAGES;
+static uint32_t minimun_reclaim_pages = MIN_RECLAIM_PAGES;
 static uint32_t minimum_interval_time = MIN_CSWAP_INTERVAL;
 #endif /* CONFIG_ZRAM_FOR_ANDROID */
 
@@ -84,13 +103,11 @@ static uint32_t minimum_interval_time = MIN_CSWAP_INTERVAL;
 #define LOWMEM_DEATHPENDING_DEPTH 3
 #endif
 
-static uint32_t lowmem_debug_level = 1;
-
 #ifdef LMK_COUNT_READ
 static uint32_t lmk_count = 0;
 #endif
 
-#ifdef CONFIG_SEC_OOM_KILLER
+#ifdef CONFIG_ANDROID_OOM_KILLER
 #define MULTIPLE_OOM_KILLER
 #define OOM_COUNT_READ
 #endif
@@ -100,9 +117,10 @@ static uint32_t oom_count = 0;
 #endif
 
 #ifdef MULTIPLE_OOM_KILLER
-#define OOM_DEPTH 7
+#define OOM_DEPTH 5
 #endif
 
+static uint32_t lowmem_debug_level = 1;
 static int lowmem_adj[6] = {
 	0,
 	1,
@@ -118,9 +136,13 @@ static int lowmem_minfree[6] = {
 };
 static int lowmem_minfree_size = 4;
 
+#ifdef CONFIG_MEMORY_HOTPLUG
+static unsigned int offlining = 0;
+#endif
 #ifdef ENHANCED_LMK_ROUTINE
-static struct task_struct *lowmem_deathpending[LOWMEM_DEATHPENDING_DEPTH] = {NULL,};
-
+static struct task_struct *lowmem_deathpending[LOWMEM_DEATHPENDING_DEPTH] = {
+	NULL,
+};
 #else
 static struct task_struct *lowmem_deathpending;
 #endif
@@ -143,16 +165,15 @@ static int
 task_notify_func(struct notifier_block *self, unsigned long val, void *data)
 {
 	struct task_struct *task = data;
-
 #ifdef ENHANCED_LMK_ROUTINE
 	int i = 0;
 
-	for (i = 0; i < LOWMEM_DEATHPENDING_DEPTH; i++)
+	for (i = 0; i < LOWMEM_DEATHPENDING_DEPTH; i++) {
 		if (task == lowmem_deathpending[i]) {
 			lowmem_deathpending[i] = NULL;
-		break;
+			break;
+		}
 	}
-
 #else
 	if (task == lowmem_deathpending)
 		lowmem_deathpending = NULL;
@@ -160,6 +181,30 @@ task_notify_func(struct notifier_block *self, unsigned long val, void *data)
 
 	return NOTIFY_OK;
 }
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+static int lmk_hotplug_callback(struct notifier_block *self,
+				unsigned long cmd, void *data)
+{
+	switch (cmd) {
+	/* Don't care LMK cases */
+	case MEM_ONLINE:
+	case MEM_OFFLINE:
+	case MEM_CANCEL_ONLINE:
+	case MEM_CANCEL_OFFLINE:
+	case MEM_GOING_ONLINE:
+		offlining = 0;
+		lowmem_print(4, "lmk in normal mode\n");
+		break;
+	/* LMK should account for movable zone */
+	case MEM_GOING_OFFLINE:
+		offlining = 1;
+		lowmem_print(4, "lmk in hotplug mode\n");
+		break;
+	}
+	return NOTIFY_DONE;
+}
+#endif
 
 static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 {
@@ -183,17 +228,30 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int selected_oom_score_adj;
 #endif
 	int array_size = ARRAY_SIZE(lowmem_adj);
-#ifndef CONFIG_DMA_CMA
-	int other_free = global_page_state(NR_FREE_PAGES) -
-					totalreserve_pages;
-#else
-	int other_free = global_page_state(NR_FREE_PAGES) -
-					global_page_state(NR_FREE_CMA_PAGES) -
-					totalreserve_pages;
-#endif
+	int other_free = global_page_state(NR_FREE_PAGES) - totalreserve_pages;
 	int other_file = global_page_state(NR_FILE_PAGES) -
 						global_page_state(NR_SHMEM);
 
+#if defined(CONFIG_ZRAM_FOR_ANDROID)
+	other_file -= total_swapcache_pages();
+#endif
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+	struct zone *zone;
+
+	if (offlining) {
+		/* Discount all free space in the section being offlined */
+		for_each_zone(zone) {
+			 if (zone_idx(zone) == ZONE_MOVABLE) {
+				other_free -= zone_page_state(zone,
+						NR_FREE_PAGES);
+				lowmem_print(4, "lowmem_shrink discounted "
+					"%lu pages in movable zone\n",
+					zone_page_state(zone, NR_FREE_PAGES));
+			}
+		}
+	}
+#endif
 	/*
 	 * If we already have a death outstanding, then
 	 * bail out right away; indicating to vmscan
@@ -247,12 +305,11 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 
 #ifdef CONFIG_ZRAM_FOR_ANDROID
 	atomic_set(&s_reclaim.lmk_running, 1);
-#endif /* CONFIG_ZRAM_FOR_ANDROID */
+#endif
 	read_lock(&tasklist_lock);
 	for_each_process(tsk) {
 		struct task_struct *p;
 		int oom_score_adj;
-
 #ifdef ENHANCED_LMK_ROUTINE
 		int is_exist_oom_task = 0;
 #endif
@@ -307,8 +364,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 				}
 			}
 
-			lowmem_print(2, "select %d (%s), adj %d, size %d, to kill\n",
-
+			lowmem_print(2, "select %d (%s), adj %d, \
+					size %d, to kill\n",
 				p->pid, p->comm, oom_score_adj, tasksize);
 		}
 #else
@@ -329,11 +386,11 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 #ifdef ENHANCED_LMK_ROUTINE
 	for (i = 0; i < LOWMEM_DEATHPENDING_DEPTH; i++) {
 		if (selected[i]) {
-			lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d\n",
-
-				selected[i]->pid, selected[i]->comm,
-				selected_oom_score_adj[i], selected_tasksize[i]);
-
+			lowmem_print(1, "send sigkill to %d (%s), adj %d,\
+				     size %d\n",
+				     selected[i]->pid, selected[i]->comm,
+				     selected_oom_score_adj[i],
+				     selected_tasksize[i]);
 			lowmem_deathpending[i] = selected[i];
 			lowmem_deathpending_timeout = jiffies + HZ;
 			send_sig(SIGKILL, selected[i], 0);
@@ -360,17 +417,14 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	lowmem_print(4, "lowmem_shrink %lu, %x, return %d\n",
 		     sc->nr_to_scan, sc->gfp_mask, rem);
 	read_unlock(&tasklist_lock);
-
 #ifdef CONFIG_ZRAM_FOR_ANDROID
 	atomic_set(&s_reclaim.lmk_running, 0);
-#endif /* CONFIG_ZRAM_FOR_ANDROID */
-
+#endif
 	return rem;
 }
 
-
 /*
- * CONFIG_SEC_OOM_KILLER : klaatu@sec
+ * CONFIG_ANDROID_OOM_KILLER : klaatu@sec
  *
  * The way to select victim by oom-killer provided by
  * linux kernel is totally different from android policy.
@@ -378,7 +432,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
  * as android does when LMK is invoked.
  *
 */
-#ifdef CONFIG_SEC_OOM_KILLER
+#ifdef CONFIG_ANDROID_OOM_KILLER
 
 static void dump_tasks_info(void)
 {
@@ -421,10 +475,10 @@ static int android_oom_handler(struct notifier_block *nb,
 #else
 	struct task_struct *selected = NULL;
 #endif
+	int order = (int)val;
 	int rem = 0;
 	int tasksize;
 	int i;
-	int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
 #ifdef MULTIPLE_OOM_KILLER
 	int selected_tasksize[OOM_DEPTH] = {0,};
 	int selected_oom_score_adj[OOM_DEPTH] = {OOM_ADJUST_MAX,};
@@ -434,26 +488,23 @@ static int android_oom_handler(struct notifier_block *nb,
 	int selected_tasksize = 0;
 	int selected_oom_score_adj;
 #endif
-	static DEFINE_RATELIMIT_STATE(oom_rs, DEFAULT_RATELIMIT_INTERVAL/5, 1);
 
 	unsigned long *freed = data;
 
 	/* show status */
-	pr_warning("%s invoked Android-oom-killer: "
+	pr_warning("%s invoked Android-oom-killer: order=%d, "
 		"oom_adj=%d, oom_score_adj=%d\n",
-		current->comm, current->signal->oom_adj,
+		current->comm, order, current->signal->oom_adj,
 		current->signal->oom_score_adj);
 	dump_stack();
 	show_mem(SHOW_MEM_FILTER_NODES);
-	if (__ratelimit(&oom_rs))
-		dump_tasks_info();
+	dump_tasks_info();
 
-	min_score_adj = 0;
 #ifdef MULTIPLE_OOM_KILLER
 	for (i = 0; i < OOM_DEPTH; i++)
-		selected_oom_score_adj[i] = min_score_adj;
+		selected_oom_score_adj[i] = lowmem_adj[0];
 #else
-	selected_oom_score_adj = min_score_adj;
+	selected_oom_score_adj = lowmem_adj[0];
 #endif
 
 #ifdef CONFIG_ZRAM_FOR_ANDROID
@@ -476,10 +527,7 @@ static int android_oom_handler(struct notifier_block *nb,
 			continue;
 
 		oom_score_adj = p->signal->oom_score_adj;
-		if (oom_score_adj < min_score_adj) {
-			task_unlock(p);
-			continue;
-		}
+
 		tasksize = get_mm_rss(p->mm);
 		task_unlock(p);
 		if (tasksize <= 0)
@@ -588,7 +636,7 @@ static struct notifier_block android_oom_notifier = {
 #ifdef CONFIG_ZRAM_FOR_ANDROID
 void could_cswap(void)
 {
-	if (atomic_read(&s_reclaim.need_to_reclaim) == 0)
+	if((hidden_cgroup_counter <= 0) && (atomic_read(&s_reclaim.need_to_reclaim) != 1))
 		return;
 
 	if (time_before(jiffies, prev_jiffy + minimum_interval_time))
@@ -600,13 +648,45 @@ void could_cswap(void)
 	if (nr_swap_pages < minimum_freeswap_pages)
 		return;
 
+	if (unlikely(s_reclaim.kcompcached == NULL))
+		return;
+
+	if (likely(atomic_read(&s_reclaim.kcompcached_enable) == 0))
+		return;
+
 	if (idle_cpu(task_cpu(s_reclaim.kcompcached)) && this_cpu_loadx(4) == 0) {
+		if ((atomic_read(&s_reclaim.idle_report) == 1) && (hidden_cgroup_counter > 0)) {
+			if(s_reclaim.rtcc_daemon){
+				send_sig(SIGUSR1, s_reclaim.rtcc_daemon, 0);
+				hidden_cgroup_counter -- ;
+				atomic_set(&s_reclaim.idle_report, 0);
+				prev_jiffy = jiffies;
+				return;
+			}
+		}
+
+		if (atomic_read(&s_reclaim.need_to_reclaim) != 1) {
+			atomic_set(&s_reclaim.idle_report, 1);
+			return;
+		}
+
 		if (atomic_read(&s_reclaim.kcompcached_running) == 0) {
 			wake_up_process(s_reclaim.kcompcached);
 			atomic_set(&s_reclaim.kcompcached_running, 1);
+			atomic_set(&s_reclaim.idle_report, 1);
 			prev_jiffy = jiffies;
 		}
 	}
+}
+
+inline void enable_soft_reclaim(void)
+{
+	atomic_set(&s_reclaim.kcompcached_enable, 1);
+}
+
+inline void disable_soft_reclaim(void)
+{
+	atomic_set(&s_reclaim.kcompcached_enable, 0);
 }
 
 inline void need_soft_reclaim(void)
@@ -622,10 +702,45 @@ inline void cancel_soft_reclaim(void)
 int get_soft_reclaim_status(void)
 {
 	int kcompcache_running = atomic_read(&s_reclaim.kcompcached_running);
+	if(kcompcache_running)
+		set_user_nice(s_reclaim.kcompcached, 0);
 	return kcompcache_running;
 }
 
-extern long rtcc_reclaim_pages(long nr_to_reclaim);
+static int soft_reclaim(void)
+{
+	int nid;
+	int i;
+	unsigned long nr_soft_reclaimed;
+	unsigned long nr_soft_scanned;
+	unsigned long nr_reclaimed = 0;
+
+	for_each_node_state(nid, N_HIGH_MEMORY) {
+		pg_data_t *pgdat = NODE_DATA(nid);
+		for (i = 0; i <= 1; i++) {
+			struct zone *zone = pgdat->node_zones + i;
+			if (!populated_zone(zone))
+				continue;
+			if (zone->all_unreclaimable)
+				continue;
+
+			nr_soft_scanned = 0;
+			nr_soft_reclaimed = mem_cgroup_soft_limit_reclaim(zone,
+						0, GFP_KERNEL,
+						&nr_soft_scanned);
+	
+			s_reclaim.nr_last_soft_reclaimed = nr_soft_reclaimed;
+			s_reclaim.nr_last_soft_scanned = nr_soft_scanned;
+			s_reclaim.nr_total_soft_reclaimed += nr_soft_reclaimed;
+			s_reclaim.nr_total_soft_scanned += nr_soft_scanned;
+			nr_reclaimed += nr_soft_reclaimed;
+		}
+	}
+
+	lss_dbg("soft reclaimed %ld pages\n", nr_reclaimed);
+	return nr_reclaimed;
+}
+
 static int do_compcache(void * nothing)
 {
 	int ret;
@@ -636,51 +751,113 @@ static int do_compcache(void * nothing)
 		if (kthread_should_stop())
 			break;
 
-    		if (atomic_read(&s_reclaim.kcompcached_running) == 1) {
-      		    if (rtcc_reclaim_pages(number_of_reclaim_pages) < minimum_reclaim_pages)
-        		cancel_soft_reclaim();
+		if (soft_reclaim() < minimun_reclaim_pages)
+			cancel_soft_reclaim();
 
-      		    atomic_set(&s_reclaim.kcompcached_running, 0);
-    		}
+		atomic_set(&s_reclaim.kcompcached_running, 0);
 		set_current_state(TASK_INTERRUPTIBLE);
+		set_user_nice(s_reclaim.kcompcached, 15);
 		schedule();
 	}
 
 	return 0;
 }
-
-static ssize_t rtcc_trigger_store(struct class *class, struct class_attribute *attr,
+static ssize_t rtcc_daemon_store(struct class *class, struct class_attribute *attr,
 			const char *buf, size_t count)
 {
-	long val, magic_sign;
+	struct task_struct *p;
+	pid_t pid;
+	long val = -1;
+	long magic_sign = -1;
 
 	sscanf(buf, "%ld,%ld", &val, &magic_sign);
 
 	if (val < 0 || ((val * val - 1) != magic_sign)) {
-		pr_warning("Invalid command.\n");
+		pr_warning("Invalid rtccd pid\n");
 		goto out;
 	}
 
-	need_soft_reclaim();
+	pid = (pid_t)val;
+	for_each_process(p) {
+		if ((pid == p->pid) && strstr(p->comm, RTCC_DAEMON_PROC)) {
+			s_reclaim.rtcc_daemon = p;
+			atomic_set(&s_reclaim.idle_report, 1);
+			goto out;
+		}
+	}
+	pr_warning("No found rtccd at pid %d!\n", pid);
 
 out:
 	return count;
 }
-
-static CLASS_ATTR(rtcc_trigger, 0200, NULL, rtcc_trigger_store);
+static CLASS_ATTR(rtcc_daemon, 0200, NULL, rtcc_daemon_store);
 static struct class *kcompcache_class;
+#endif /* CONFIG_ZRAM_FOR_ANDROID */
 
-static int kcompcache_idle_notifier(struct notifier_block *nb, unsigned long val, void *data)
+
+static struct shrinker lowmem_shrinker = {
+	.shrink = lowmem_shrink,
+	.seeks = DEFAULT_SEEKS * 16
+};
+
+static int __init lowmem_init(void)
 {
-	could_cswap();
+	task_free_register(&task_nb);
+	register_shrinker(&lowmem_shrinker);
+#ifdef CONFIG_ANDROID_OOM_KILLER
+	register_oom_notifier(&android_oom_notifier);
+#endif
+#ifdef CONFIG_MEMORY_HOTPLUG
+	hotplug_memory_notifier(lmk_hotplug_callback, 0);
+#endif
+#ifdef CONFIG_ZRAM_FOR_ANDROID
+	kcompcache_class = class_create(THIS_MODULE, "kcompcache");
+	if (IS_ERR(kcompcache_class)) {
+		pr_err("%s: couldn't create kcompcache sysfs class.\n", __func__);
+		goto error_create_kcompcache_class;
+	}
+	if (class_create_file(kcompcache_class, &class_attr_rtcc_daemon) < 0) {
+		pr_err("%s: couldn't create rtcc daemon sysfs file.\n", __func__);
+		goto error_create_rtcc_daemon_class_file;
+	}
+	
+	s_reclaim.kcompcached = kthread_run(do_compcache, NULL, "kcompcached");
+	if (IS_ERR(s_reclaim.kcompcached)) {
+		/* failure at boot is fatal */
+		BUG_ON(system_state == SYSTEM_BOOTING);
+	}
+	set_user_nice(s_reclaim.kcompcached, 0);
+	atomic_set(&s_reclaim.need_to_reclaim, 0);
+	atomic_set(&s_reclaim.kcompcached_running, 0);
+	atomic_set(&s_reclaim.idle_report, 0);
+	enable_soft_reclaim();
+	prev_jiffy = jiffies;
+	return 0;
+error_create_rtcc_daemon_class_file:
+	class_remove_file(kcompcache_class, &class_attr_rtcc_daemon);
+error_create_kcompcache_class:
+	class_destroy(kcompcache_class);
+#endif /* CONFIG_ZRAM_FOR_ANDROID */
 	return 0;
 }
 
-static struct notifier_block kcompcache_idle_nb = {
-	.notifier_call = kcompcache_idle_notifier,
-};
-#endif /* CONFIG_ZRAM_FOR_ANDROID */
+static void __exit lowmem_exit(void)
+{
+	unregister_shrinker(&lowmem_shrinker);
+	task_free_unregister(&task_nb);
 
+#ifdef CONFIG_ZRAM_FOR_ANDROID
+	if (s_reclaim.kcompcached) {
+		cancel_soft_reclaim();
+		kthread_stop(s_reclaim.kcompcached);
+		s_reclaim.kcompcached = NULL;
+	}
+	if (kcompcache_class) {
+		class_remove_file(kcompcache_class, &class_attr_rtcc_daemon);
+		class_destroy(kcompcache_class);
+	}
+#endif /* CONFIG_ZRAM_FOR_ANDROID */
+}
 
 #ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES
 static int lowmem_oom_adj_to_oom_score_adj(int oom_adj)
@@ -736,94 +913,35 @@ static int lowmem_adj_array_set(const char *val, const struct kernel_param *kp)
 
 static int lowmem_adj_array_get(char *buffer, const struct kernel_param *kp)
 {
-        return param_array_ops.get(buffer, kp);
+	return param_array_ops.get(buffer, kp);
 }
 
 static void lowmem_adj_array_free(void *arg)
 {
-        param_array_ops.free(arg);
+	param_array_ops.free(arg);
 }
 
 static struct kernel_param_ops lowmem_adj_array_ops = {
-        .set = lowmem_adj_array_set,
-        .get = lowmem_adj_array_get,
-        .free = lowmem_adj_array_free,
+	.set = lowmem_adj_array_set,
+	.get = lowmem_adj_array_get,
+	.free = lowmem_adj_array_free,
 };
 
 static const struct kparam_array __param_arr_adj = {
-        .max = ARRAY_SIZE(lowmem_adj),
-        .num = &lowmem_adj_size,
-        .ops = &param_ops_int,
-        .elemsize = sizeof(lowmem_adj[0]),
-        .elem = lowmem_adj,
+	.max = ARRAY_SIZE(lowmem_adj),
+	.num = &lowmem_adj_size,
+	.ops = &param_ops_int,
+	.elemsize = sizeof(lowmem_adj[0]),
+	.elem = lowmem_adj,
 };
 #endif
-
-static struct shrinker lowmem_shrinker = {
-	.shrink = lowmem_shrink,
-	.seeks = DEFAULT_SEEKS * 16
-};
-
-static int __init lowmem_init(void)
-{
-	task_free_register(&task_nb);
-	register_shrinker(&lowmem_shrinker);
-#ifdef CONFIG_MEMORY_HOTPLUG
-	hotplug_memory_notifier(lmk_hotplug_callback, 0);
-#endif
-
-#ifdef CONFIG_ZRAM_FOR_ANDROID
-	s_reclaim.kcompcached = kthread_run(do_compcache, NULL, "kcompcached");
-	if (IS_ERR(s_reclaim.kcompcached)) {
-		/* failure at boot is fatal */
-		BUG_ON(system_state == SYSTEM_BOOTING);
-	}
-	set_user_nice(s_reclaim.kcompcached, 0);
-	atomic_set(&s_reclaim.need_to_reclaim, 0);
-	atomic_set(&s_reclaim.kcompcached_running, 0);
-	prev_jiffy = jiffies;
-
-	idle_notifier_register(&kcompcache_idle_nb);
-
-	kcompcache_class = class_create(THIS_MODULE, "kcompcache");
-	if (IS_ERR(kcompcache_class)) {
-		pr_err("%s: couldn't create kcompcache class.\n", __func__);
-		return 0;
-	}
-	if (class_create_file(kcompcache_class, &class_attr_rtcc_trigger) < 0) {
-		pr_err("%s: couldn't create rtcc trigger sysfs file.\n", __func__);
-		class_destroy(kcompcache_class);
-	}
-#endif /* CONFIG_ZRAM_FOR_ANDROID */
-	return 0;
-}
-
-static void __exit lowmem_exit(void)
-{
-	unregister_shrinker(&lowmem_shrinker);
-	task_free_unregister(&task_nb);
-
-#ifdef CONFIG_ZRAM_FOR_ANDROID
-	idle_notifier_unregister(&kcompcache_idle_nb);
-	if (s_reclaim.kcompcached) {
-		cancel_soft_reclaim();
-		kthread_stop(s_reclaim.kcompcached);
-		s_reclaim.kcompcached = NULL;
-	}
-
-	if (kcompcache_class) {
-		class_remove_file(kcompcache_class, &class_attr_rtcc_trigger);
-		class_destroy(kcompcache_class);
-	}
-#endif /* CONFIG_ZRAM_FOR_ANDROID */
-}
 
 module_param_named(cost, lowmem_shrinker.seeks, int, S_IRUGO | S_IWUSR);
 #ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES
 __module_param_call(MODULE_PARAM_PREFIX, adj,
 		    &lowmem_adj_array_ops,
 		    .arr = &__param_arr_adj,
-		    S_IRUGO | S_IWUSR, 1);
+		    S_IRUGO | S_IWUSR, -1);
 __MODULE_PARM_TYPE(adj, "array of int");
 #else
 module_param_array_named(adj, lowmem_adj, int, &lowmem_adj_size,
@@ -842,12 +960,12 @@ module_param_named(oomcount, oom_count, uint, S_IRUGO);
 #endif
 
 #ifdef CONFIG_ZRAM_FOR_ANDROID
-module_param_named(nr_reclaim, number_of_reclaim_pages, uint, S_IRUSR | S_IWUSR);
 module_param_named(min_freeswap, minimum_freeswap_pages, uint, S_IRUSR | S_IWUSR);
-module_param_named(min_reclaim, minimum_reclaim_pages, uint, S_IRUSR | S_IWUSR);
+module_param_named(min_reclaim, minimun_reclaim_pages, uint, S_IRUSR | S_IWUSR);
 module_param_named(min_interval, minimum_interval_time, uint, S_IRUSR | S_IWUSR);
 #endif /* CONFIG_ZRAM_FOR_ANDROID */
 
 module_init(lowmem_init);
 module_exit(lowmem_exit);
+
 MODULE_LICENSE("GPL");
