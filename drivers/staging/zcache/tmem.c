@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2009-2011, Dan Magenheimer, Oracle Corp.
  *
- * The primary purpose of Transcendent Memory ("tmem") is to map object-oriented
+ * The primary purpose of Transcedent Memory ("tmem") is to map object-oriented
  * "handles" (triples containing a pool id, and object id, and an index), to
  * pages in a page-accessible memory (PAM).  Tmem references the PAM pages via
  * an abstract "pampd" (PAM page-descriptor), which can be operated on by a
@@ -26,7 +26,7 @@
 
 #include <linux/list.h>
 #include <linux/spinlock.h>
-#include <asm/atomic.h>
+#include <linux/atomic.h>
 
 #include "tmem.h"
 
@@ -678,30 +678,6 @@ int tmem_flush_page(struct tmem_pool *pool,
 	}
 	ret = 0;
 
-out:
-	spin_unlock(&hb->lock);
-	return ret;
-}
-
-/*
- * If a page in tmem matches the handle, replace the page so that any
- * subsequent "get" gets the new page.  Returns 0 if
- * there was a page to replace, else returns -1.
- */
-int tmem_replace(struct tmem_pool *pool, struct tmem_oid *oidp,
-			uint32_t index, void *new_pampd)
-{
-	struct tmem_obj *obj;
-	int ret = -1;
-	struct tmem_hashbucket *hb;
-
-	hb = &pool->hashbucket[tmem_oid_hash(oidp)];
-	spin_lock(&hb->lock);
-	obj = tmem_obj_find(hb, oidp);
-	if (obj == NULL)
-		goto out;
-	new_pampd = tmem_pampd_replace_in_obj(obj, index, new_pampd);
-	ret = (*tmem_pamops.replace_in_obj)(new_pampd, obj);
 out:
 	spin_unlock(&hb->lock);
 	return ret;

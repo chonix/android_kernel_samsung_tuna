@@ -12,7 +12,7 @@
 #include <linux/types.h>
 #include <linux/highmem.h>
 #include <linux/hash.h>
-#include <asm/atomic.h>
+#include <linux/atomic.h>
 
 /*
  * These are pre-defined by the Xen<->Linux ABI
