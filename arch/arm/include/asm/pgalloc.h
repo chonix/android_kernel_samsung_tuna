@@ -64,13 +64,16 @@ pte_alloc_one_kernel(struct mm_struct *mm, unsigned long addr)
 	pte_t *pte;
 
 	pte = (pte_t *)__get_free_page(PGALLOC_GFP);
-	if (pte)
-#if !CONFIG_CPU_CACHE_V7		
+
+#if !CONFIG_CPU_CACHE_V7	
+	if (pte) {	
 		clean_pte_table(pte);
+
+	}
 #endif
 
 	return pte;
-}
+ }
 
 static inline pgtable_t
 pte_alloc_one(struct mm_struct *mm, unsigned long addr)
