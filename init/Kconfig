@@ -991,42 +991,13 @@ source "usr/Kconfig"
 
 endif
 
-choice
- prompt "Optimization Level"
-  default CC_OPTIMIZE_DEFAULT
-
 config CC_OPTIMIZE_FOR_SIZE
- bool "Optimize for Size"
- bool "Use -Os"
- help
-  Enabling this option will pass "-Os" instead of "-O2" to gcc
-  resulting in a smaller kernel.
-
-config CC_OPTIMIZE_DEFAULT
- bool "Optimize Default Level"
- bool "Use -O2"
-
-config CC_OPTIMIZE_O3
- bool "Optimize Linaro Max Level"
- bool "Use -O3"
-
-endchoice
-
-config CC_GRAPHITE_OPTIMIZATION
-	bool "Enable graphite optimizations"
+	bool "Optimize for size"
 	help
-	  Enabling this option will turn on graphite optimizations.
+	  Enabling this option will pass "-Os" instead of "-O2" to gcc
+	  resulting in a smaller kernel.
 
-config CC_LINK_TIME_OPTIMIZATION
-	bool "Enable link-time optimization"
-	help
-	  Enabling this option will turn on link time optimization.
-
-config FFAST_MATH
-	bool "Use -ffast-math"
-	help
-	 Sets -fno-math-errno, -funsafe-math-optimizations, -ffinite-math-only, -fno-rounding-math,
-	 -fno-signaling-nans, -fno-trapping-math, -fno-signed-zeros, and -fcx-limited-range.
+	  If unsure, say Y.
 
 config SYSCTL
 	bool
