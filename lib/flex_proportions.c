@@ -62,7 +62,7 @@ void fprop_global_destroy(struct fprop_global *p)
  */
 bool fprop_new_period(struct fprop_global *p, int periods)
 {
-	s64 events;
+	u64 events;
 	unsigned long flags;
 
 	local_irq_save(flags);
