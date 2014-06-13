@@ -42,6 +42,8 @@
 
 #define DEF_FREQUENCY_UP_THRESHOLD		(92)
 #define DEF_FREQUENCY_DOWN_THRESHOLD		(27)
+#define CPU_FREQ_MIN_TICKS 			 10
+#define CPU_FREQ_SAMPLING_LATENCY_MULTIPLIER     1000
 
 /*
  * The polling frequency of this governor depends on the capability of
@@ -57,7 +59,7 @@ static unsigned int def_sampling_rate;
 #define MIN_SAMPLING_RATE_RATIO			(2)
 /* for correct statistics, we need at least 10 ticks between each measure */
 #define MIN_STAT_SAMPLING_RATE			\
-	(MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10))
+	(MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(CPU_FREQ_MIN_TICKS))
 #define MIN_SAMPLING_RATE			\
 			(def_sampling_rate / MIN_SAMPLING_RATE_RATIO)
 #define MAX_SAMPLING_RATE			(500 * def_sampling_rate)
@@ -110,10 +112,10 @@ static inline unsigned int get_cpu_idle_time(unsigned int cpu)
 	unsigned int add_nice = 0, ret;
 
 	if (dbs_tuners_ins.ignore_nice)
-		add_nice = kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
+		add_nice = kstat_cpu(cpu).cpustat.nice;
 
-	ret = kcpustat_cpu(cpu).cpustat[CPUTIME_IDLE] +
-		kcpustat_cpu(cpu).cpustat[CPUTIME_IOWAIT] +
+	ret = kstat_cpu(cpu).cpustat.idle +
+		kstat_cpu(cpu).cpustat.iowait +
 		add_nice;
 
 	return ret;
@@ -310,7 +312,7 @@ static void dbs_check_cpu(int cpu)
 {
 	unsigned int idle_ticks, up_idle_ticks, down_idle_ticks;
 	unsigned int tmp_idle_ticks, total_idle_ticks;
-	//unsigned int freq_target;
+	unsigned int freq_target;
 	unsigned int freq_down_sampling_rate;
 	struct cpu_dbs_info_s *this_dbs_info = &per_cpu(cpu_dbs_info, cpu);
 	struct cpufreq_policy *policy;
@@ -483,7 +485,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 			if (latency == 0)
 				latency = 1;
 
-			def_sampling_rate = 10 * latency * 1000;
+			def_sampling_rate = 10 * latency *
+				CPU_FREQ_SAMPLING_LATENCY_MULTIPLIER;
 
 			if (def_sampling_rate < MIN_STAT_SAMPLING_RATE)
 				def_sampling_rate = MIN_STAT_SAMPLING_RATE;
