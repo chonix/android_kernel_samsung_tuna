@@ -155,6 +155,7 @@ extern void vfp_flush_hwstate(struct thread_info *);
 #define _TIF_FREEZE		(1 << TIF_FREEZE)
 #define _TIF_RESTORE_SIGMASK	(1 << TIF_RESTORE_SIGMASK)
 #define _TIF_SECCOMP		(1 << TIF_SECCOMP)
+#define TIF_MM_RELEASED		22	/* task MM has been released */
 
 /*
  * Change these and you break ASM code in entry-common.S
