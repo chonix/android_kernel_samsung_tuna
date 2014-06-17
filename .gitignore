@@ -45,6 +45,8 @@ modules.builtin
 /Module.markers
 /Module.symvers
 error.log
+buildblurry.sh
+
 #
 # git files that we don't want to ignore even it they are dot-files
 #
