@@ -259,11 +259,8 @@ SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
 	BUILD_BUG_ON(TFD_NONBLOCK != O_NONBLOCK);
 
 	if ((flags & ~TFD_CREATE_FLAGS) ||
- 	    (clockid != CLOCK_MONOTONIC &&
-  	     clockid != CLOCK_REALTIME &&
-  	     clockid != CLOCK_REALTIME_ALARM &&
-	     clockid != CLOCK_BOOTTIME &&
-  	     clockid != CLOCK_BOOTTIME_ALARM))
+	    (clockid != CLOCK_MONOTONIC &&
+	     clockid != CLOCK_REALTIME))
 		return -EINVAL;
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
