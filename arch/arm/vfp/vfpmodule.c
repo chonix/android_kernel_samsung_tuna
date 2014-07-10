@@ -11,7 +11,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/cpu.h>
-#include <linux/cpu_pm.h>
+#include <linux/hardirq.h>
 #include <linux/kernel.h>
 #include <linux/notifier.h>
 #include <linux/signal.h>
@@ -21,12 +21,6 @@
 #include <linux/uaccess.h>
 #include <linux/user.h>
 #include <linux/export.h>
-
-#include <linux/uaccess.h>
-#include <linux/user.h>
-#include <linux/proc_fs.h>
-#include <linux/hardirq.h>
-#include <linux/seq_file.h>
 
 #include <asm/cputype.h>
 #include <asm/thread_notify.h>
@@ -62,19 +56,6 @@ unsigned int VFP_arch;
  */
 union vfp_state *vfp_current_hw_state[NR_CPUS];
 
- /*
-  * Is 'thread's most up to date state stored in this CPUs hardware?
-  * Must be called from non-preemptible context.
-  */
- static bool vfp_state_in_hw(unsigned int cpu, struct thread_info *thread)
- {
- #ifdef CONFIG_SMP
-         if (thread->vfpstate.hard.cpu != cpu)
-                return false;
- #endif
-         return vfp_current_hw_state[cpu] == &thread->vfpstate;
- }
-
 /*
  * Is 'thread's most up to date state stored in this CPUs hardware?
  * Must be called from non-preemptible context.
@@ -103,11 +84,6 @@ static void vfp_force_reload(unsigned int cpu, struct thread_info *thread)
 	thread->vfpstate.hard.cpu = NR_CPUS;
 #endif
 }
-
-/*
-* Used for reporting emulation statistics via /proc
-*/
-static atomic64_t vfp_bounce_count = ATOMIC64_INIT(0);
 
 /*
  * Per-thread VFP initialization.
@@ -357,7 +333,6 @@ void VFP_bounce(u32 trigger, u32 fpexc, struct pt_regs *regs)
 	u32 fpscr, orig_fpscr, fpsid, exceptions;
 
 	pr_debug("VFP: bounce: trigger %08x fpexc %08x\n", trigger, fpexc);
-	atomic64_inc(&vfp_bounce_count);
 
 	/*
 	 * At this point, FPEXC can have the following configuration:
@@ -454,15 +429,19 @@ void VFP_bounce(u32 trigger, u32 fpexc, struct pt_regs *regs)
 
 static void vfp_enable(void *unused)
 {
-	u32 access = get_copro_access();
+	u32 access;
 
+	BUG_ON(preemptible());
+	access = get_copro_access();
 	/*
 	 * Enable full access to VFP (cp10 and cp11)
 	 */
 	set_copro_access(access | CPACC_FULL(10) | CPACC_FULL(11));
 }
 
-#ifdef CONFIG_CPU_PM
+#ifdef CONFIG_PM
+#include <linux/syscore_ops.h>
+
 static int vfp_pm_suspend(void)
 {
 	struct thread_info *ti = current_thread_info();
@@ -498,33 +477,19 @@ static void vfp_pm_resume(void)
 	fmxr(FPEXC, fmrx(FPEXC) & ~FPEXC_EN);
 }
 
-static int vfp_cpu_pm_notifier(struct notifier_block *self, unsigned long cmd,
-	void *v)
-{
-	switch (cmd) {
-	case CPU_PM_ENTER:
-		vfp_pm_suspend();
-		break;
-	case CPU_PM_ENTER_FAILED:
-	case CPU_PM_EXIT:
-		vfp_pm_resume();
-		break;
-	}
-	return NOTIFY_OK;
-}
-
-static struct notifier_block vfp_cpu_pm_notifier_block = {
-	.notifier_call = vfp_cpu_pm_notifier,
+static struct syscore_ops vfp_pm_syscore_ops = {
+	.suspend	= vfp_pm_suspend,
+	.resume		= vfp_pm_resume,
 };
 
 static void vfp_pm_init(void)
 {
-	cpu_pm_register_notifier(&vfp_cpu_pm_notifier_block);
+	register_syscore_ops(&vfp_pm_syscore_ops);
 }
 
 #else
 static inline void vfp_pm_init(void) { }
-#endif /* CONFIG_CPU_PM */
+#endif /* CONFIG_PM */
 
 /*
  * Ensure that the VFP state stored in 'thread->vfpstate' is up to date
@@ -656,27 +621,6 @@ static int vfp_hotplug(struct notifier_block *b, unsigned long action,
 	return NOTIFY_OK;
 }
 
-
-#ifdef CONFIG_PROC_FS
-static int vfp_bounce_show(struct seq_file *m, void *v)
-{
-        seq_printf(m, "%llu\n", atomic64_read(&vfp_bounce_count));
-        return 0;
-}
-
-static int vfp_bounce_open(struct inode *inode, struct file *file)
-{
-        return single_open(file, vfp_bounce_show, NULL);
-}
-
-static const struct file_operations vfp_bounce_fops = {
-        .open           = vfp_bounce_open,
-        .read           = seq_read,
-        .llseek         = seq_lseek,
-        .release        = single_release,
-};
-#endif
-
 void vfp_kmode_exception(void)
 {
 	/*
@@ -752,7 +696,7 @@ static int __init vfp_init(void)
 	unsigned int cpu_arch = cpu_architecture();
 
 	if (cpu_arch >= CPU_ARCH_ARMv6)
-		vfp_enable(NULL);
+		on_each_cpu(vfp_enable, NULL, 1);
 
 	/*
 	 * First check that there is a VFP that we can use.
@@ -772,8 +716,6 @@ static int __init vfp_init(void)
 		printk("no double precision support\n");
 	} else {
 		hotcpu_notifier(vfp_hotplug, 0);
-
-		smp_call_function(vfp_enable, NULL, 1);
 
 		VFP_arch = (vfpsid & FPSID_ARCH_MASK) >> FPSID_ARCH_BIT;  /* Extract the architecture version */
 		printk("implementor %02x architecture %d part %02x variant %x rev %x\n",
@@ -808,7 +750,6 @@ static int __init vfp_init(void)
 				elf_hwcap |= HWCAP_VFPD32;
 		}
 #endif
-#ifdef CONFIG_NEON
 		/*
 		 * Check for the presence of the Advanced SIMD
 		 * load/store instructions, integer and single
@@ -816,27 +757,15 @@ static int __init vfp_init(void)
 		 * for NEON if the hardware has the MVFR registers.
 		 */
 		if ((read_cpuid_id() & 0x000f0000) == 0x000f0000) {
+#ifdef CONFIG_NEON
 			if ((fmrx(MVFR1) & 0x000fff00) == 0x00011100)
 				elf_hwcap |= HWCAP_NEON;
+#endif
+			if ((fmrx(MVFR1) & 0xf0000000) == 0x10000000)
+				elf_hwcap |= HWCAP_VFPv4;
 		}
-#endif
 	}
-
-	return 0;
-}
-
-static int __init vfp_rootfs_init(void)
-{
-#ifdef CONFIG_PROC_FS
-	static struct proc_dir_entry *procfs_entry;
-
-	procfs_entry = proc_create("cpu/vfp_bounce", S_IRUGO, NULL,
-			&vfp_bounce_fops);
-	if (!procfs_entry)
-		pr_err("Failed to create procfs node for VFP bounce reporting\n");
-#endif
 	return 0;
 }
 
 core_initcall(vfp_init);
-rootfs_initcall(vfp_rootfs_init);
